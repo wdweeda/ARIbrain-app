@@ -26,7 +26,7 @@ setwd("/path/to/ARIbrain-app")
 
 #### 1. Open ```app.R``` in Rstudio, and press the ```Run App``` button on the top right corner.
 
-#### 2. Copy and paste the code in ```app.R``` on Rstudio console.
+#### 2. Copy and run the code in ```app.R``` on Rstudio console.
 
 # Find bugs?
 The ARIbrain app is currently on available as beta-version that can only be run locally. We will kepp improving and updating the app. You can also use the [ARIbrain](https://github.com/wdweeda/ARIbrain) R package to do ARI. If you want more information or find any bugs, please contact the maintainer (w dot d dot weeda at fsw dot leidenuniv dot nl).
