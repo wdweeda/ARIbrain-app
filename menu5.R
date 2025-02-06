@@ -1,685 +1,283 @@
 # -------------------- menu5 -------------------- #
 
-observeMenu5 <- function(input, output, session) {
+observeMenu5 <- function(input, output, session, fileInfo, xyz) {
   
-  # render sidebar tab
+  # Render sidebar tab
   output$menu <- renderMenu({
     sidebarMenu(
-      menuItem(
-        "Input data",
-        tabName = "menu1",
-        icon = icon("file-import")
-      ),
-      menuItem(
-        "Brain mask",
-        tabName = "menu2",
-        icon = icon("sliders-h")
-      ),
-      menuItem(
-        "Analysis settings",
-        tabName = "menu3",
-        icon = icon("cogs")
-      ),
-      menuItem(
-        "Initial results",
-        tabName = "menu4",
-        icon = icon("brain")
-      ),
-      menuItem(
-        "Interactive results",
-        tabName = "menu5",
-        icon = icon("list-alt")
-      )
+      menuItem("Input data",          tabName = "menu1", icon = icon("file-import")),
+      menuItem("Brain mask",          tabName = "menu2", icon = icon("sliders-h")),
+      menuItem("Analysis settings",   tabName = "menu3", icon = icon("cogs")),
+      menuItem("Initial results",     tabName = "menu4", icon = icon("brain")),
+      menuItem("Interactive results", tabName = "menu5", icon = icon("list-alt"))
     )
   })
   isolate({updateTabItems(session, "tabs", "menu5")})
   
-  # create reactive values
-  vs <- reactiveValues(x        = round((fileInfo$header$dim[2]+1)/2),
-                       y        = round((fileInfo$header$dim[3]+1)/2),
-                       z        = round((fileInfo$header$dim[4]+1)/2),
-                       tblARI   = fileInfo$tblARI,
-                       tblXYZ   = fileInfo$tblXYZ,
-                       img_clus = fileInfo$img_clus,
-                       img_tdps = fileInfo$img_tdps)
-  
-  # render TDP bound box (UI)
+  # Render interactive results box (UI)
   output$boundBox <- renderUI({
-    box(
-      title = "Interactive Results",
-      status = "primary",
-      solidHeader = TRUE,
-      collapsible = FALSE,
-      width = 12,
-      height = "100%",
-      tags$div(style = "margin-bottom: 1em",
-               "Please click the image or select a row in the cluster 
-                table for choosing a cluster. To increase the size of 
-                the chosen cluster please press buttons \"+\", and \"-\"
-                to decrease the cluster size. Increasing cluster 
-                size leads to a reduced TDP, and vice versa.")
-      # tags$div(style = "margin-bottom: 1em",
-      #          "Please click the image or select a row in the cluster 
-      #           table for choosing a cluster. To increase the size of 
-      #           the chosen cluster please press buttons \"+\" for normal  
-      #           jump or \"++\" for substantial jump, and \"-\" and 
-      #           \"--\" to decrease the cluster size. Increasing cluster 
-      #           size leads to a reduced TDP, and vice versa.")
-    )
+    box(title = "Interactive Results", status = "primary", solidHeader = TRUE, collapsible = FALSE, width = 12, height = "100%",
+        tags$div(style = "margin-bottom: 1em", "Please click the image or select a row in the cluster table for choosing a cluster. To adjust the cluster size, press the \"+\" buttons to increase it, or the \"-\" buttons to decrease it. Increasing the cluster size reduces the TDP, while decreasing it increases the TDP."))
   })
   
-  # render download button box (UI)
+  # Render download button box (UI)
   output$dlBox2 <- renderUI({
-    box(
-      solidHeader = TRUE,
-      collapsible = FALSE,
-      width = 12,
-      height = "100%",
-      tags$div(
-        style = "display: inline-block;",
-        downloadButton("dlButton2", "Download")
-      ),
-      tags$div(
-        style = "display: inline-block; width: 1em;",
-        HTML("<br>")
-      ),
-      tags$div(
-        style = "display: inline-block;",
-        helpText("Please press the button to download 
-                  the cluster map.")
-      )
-    )
+    req(xyz$img_clus)
+    box(solidHeader = TRUE, collapsible = FALSE, width = 12, height = "100%",
+        tags$div(style = "display: inline-block;", downloadButton("dlButton2", "Download")), tags$div(style = "display: inline-block; width: 1em;", HTML("<br>")),
+        tags$div(style = "display: inline-block;", helpText("You can press the button to download the current cluster image.")))
   })
-  
-  # Download images
+  # Download cluster image
   output$dlButton2 <- downloadHandler(
-    filename = "clusimg.nii",
-    # function() {
-    #   paste0(fileInfo$outputDir, .Platform$file.sep, "clusimg.nii")
-    # },
+    filename = "clusimg_adj.nii",
+    # function() paste0(fileInfo$outputDir, .Platform$file.sep, "clusimg.nii"),
     content = function(file) {
-      RNifti::writeNifti(vs$img_clus, file, template = fileInfo$data)
+      RNifti::writeNifti(xyz$img_clus, file, template = fileInfo$data)
     }
   )
   
-  # render sagittal, coronal & axial result boxes (UI)
+  # Render sagittal, coronal & axial result boxes (UI)
   output$sagResBox <- renderUI({
-    box(
-      width = 4,
-      height = "100%",
-      background = "black",
-      sliderInput("xslider", label = NULL, step = 1, value = vs$x,
-                  min = 1, max = fileInfo$header$dim[2]),
-      plotOutput("imageSag", click = "sag_click")
-    )
+    req(xyz$x, fileInfo$header)
+    box(width = 4, height = "100%", background = "black",
+        sliderInput("xslider", label = NULL, step = 1, value = xyz$x, min = 1, max = fileInfo$header$dim[2]),
+        plotOutput("imageSag", click = "sag_click"))
   })
   output$corResBox <- renderUI({
-    box(
-      width = 4,
-      height = "100%",
-      background = "black",
-      sliderInput("yslider", label = NULL, step = 1, value = vs$y,
-                  min = 1, max = fileInfo$header$dim[3]),
-      plotOutput("imageCor", click = "cor_click")
-    )
+    req(xyz$y, fileInfo$header)
+    box(width = 4, height = "100%", background = "black",
+        sliderInput("yslider", label = NULL, step = 1, value = xyz$y, min = 1, max = fileInfo$header$dim[3]),
+        plotOutput("imageCor", click = "cor_click"))
   })
   output$axiResBox <- renderUI({
-    box(
-      width = 4,
-      height = "100%",
-      background = "black",
-      sliderInput("zslider", label = NULL, step = 1, value = vs$z,
-                  min = 1, max = fileInfo$header$dim[4]),
-      plotOutput("imageAxi", click = "axi_click")
-    )
+    req(xyz$z, fileInfo$header)
+    box(width = 4, height = "100%", background = "black",
+        sliderInput("zslider", label = NULL, step = 1, value = xyz$z, min = 1, max = fileInfo$header$dim[4]),
+        plotOutput("imageAxi", click = "axi_click"))
   })
   
-  # observe event after user clicking the image
-  observeEvent(input$sag_click, {
-    vs$y <- round(input$sag_click$x)
-    vs$z <- round(input$sag_click$y)
-    DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-  })
-  observeEvent(input$cor_click, {
-    vs$x <- round(input$cor_click$x)
-    vs$z <- round(input$cor_click$y)
-    DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-  })
-  observeEvent(input$axi_click, {
-    vs$x <- round(input$axi_click$x)
-    vs$y <- round(input$axi_click$y)
-    DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-  })
-  
-  # observe event after user changing the sliders
-  observeEvent(input$xslider, {
-    vs$x <- input$xslider
-    DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-  })
-  observeEvent(input$yslider, {
-    vs$y <- input$yslider
-    DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-  })
-  observeEvent(input$zslider, {
-    vs$z <- input$zslider
-    DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-  })
-  
-  # render gradient maps
+  # Render cluster images
   output$imageSag <- renderPlot({
-    plotImage(fileInfo$grad_map, fileInfo$header$dim[2:4],
-              vs$x, vs$y, vs$z, gray.colors(64,0,1),
-              FALSE, zlim = c(0,1), views = c("sag"))
-    plotImage(vs$img_clus, fileInfo$header$dim[2:4], vs$x, vs$y, vs$z, 
-              rainbow(max(vs$img_clus[!is.na(vs$img_clus)])), TRUE, 
-              zlim = c(1, max(vs$img_clus[!is.na(vs$img_clus)])),
-              views = c("sag"))
-    abline(h = vs$z, v = vs$y, col = "green")
+    req(xyz$x, xyz$y, xyz$z, fileInfo$map_grad, fileInfo$header)
+    plotImage(fileInfo$map_grad, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("sag"))
+    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("sag"))
+    abline(h = xyz$z, v = xyz$y, col = "green")
   })
   output$imageCor <- renderPlot({
-    plotImage(fileInfo$grad_map, fileInfo$header$dim[2:4],
-              vs$x, vs$y, vs$z, gray.colors(64,0,1), 
-              FALSE, zlim = c(0,1), views = c("cor"))
-    plotImage(vs$img_clus, fileInfo$header$dim[2:4], vs$x, vs$y, vs$z, 
-              rainbow(max(vs$img_clus[!is.na(vs$img_clus)])), TRUE, 
-              zlim = c(1, max(vs$img_clus[!is.na(vs$img_clus)])),
-              views = c("cor"))
-    abline(h = vs$z, v = vs$x, col = "green")
+    req(xyz$x, xyz$y, xyz$z, fileInfo$map_grad, fileInfo$header)
+    plotImage(fileInfo$map_grad, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("cor"))
+    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("cor"))
+    abline(h = xyz$z, v = xyz$x, col = "green")
   })
   output$imageAxi <- renderPlot({
-    plotImage(fileInfo$grad_map, fileInfo$header$dim[2:4],
-              vs$x, vs$y, vs$z, gray.colors(64,0,1), 
-              FALSE, zlim = c(0,1), views = c("axi"))
-    plotImage(vs$img_clus, fileInfo$header$dim[2:4], vs$x, vs$y, vs$z, 
-              rainbow(max(vs$img_clus[!is.na(vs$img_clus)])), TRUE, 
-              zlim = c(1, max(vs$img_clus[!is.na(vs$img_clus)])),
-              views = c("axi"))
-    abline(h = vs$y, v = vs$x, col = "green")
+    req(xyz$x, xyz$y, xyz$z, fileInfo$map_grad, fileInfo$header)
+    plotImage(fileInfo$map_grad, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("axi"))
+    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("axi"))
+    abline(h = xyz$y, v = xyz$x, col = "green")
   })
   
-  # render result table box (UI)
+  # Render result table box (UI)
   output$tableBox <- renderUI({
-    box(
-      title = "Cluster Table",
-      status = "primary",
-      solidHeader = TRUE,
-      collapsible = TRUE,
-      width = 12,
-      height = "100%",
-      tags$div(
-        style = "margin-bottom: 1em", 
-        DT::dataTableOutput("resTable")
-      ),
-      tags$div(style = "display:inline-block", width = 2,
-               actionButton("clearRows", "Clear selected cluster")),
-      tags$div(style = "display:inline-block", width = 2,
-               actionButton("sizePlus",       "Size +")),
-      # tags$div(style = "display:inline-block", width = 2,
-      #          actionButton("sizePlusPlus",   "Size ++")),
-      # tags$div(style = "display:inline-block", width = 2,
-      #          actionButton("sizeMinusMinus", "Size --")),
-      tags$div(style = "display:inline-block", width = 2,
-               actionButton("sizeMinus",      "Size -")),
-      tags$div(style = "display:inline-block", width = 2,
-               actionButton("redoAnalysis", "Redo", 
-                            icon = icon("redo-alt")))
+    req(xyz$tblARI)
+    box(title = "Cluster Table", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 12, height = "100%",
+        # Consistent font size, height, and background color styling
+        tags$style(HTML(".btn-custom { font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; padding: 7px 10px; height: 35px; background-color: #3c8dbc; color: white; }
+                         .btn-action { font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; padding: 7px 10px; height: 35px; background-color: #3c8dbc; color: white; }
+                         .btn-lg { height: 35px; font-size: 13px; padding: 7px 10px; }
+                         .btn-sm { height: 35px; font-size: 13px; padding: 7px 10px; }")),
+        # Table output
+        tags$div(style = "margin-bottom: 1em", DT::dataTableOutput("resTable")),
+        # Action buttons with consistent styling and blue background matching dashboard blue
+        tags$div(style = "display:inline-block", width = 2, actionButton("clearRows", "Clear Selection", icon = icon("eraser"), class = "btn-action btn-primary btn-sm")),
+        tags$div(style = "display:inline-block", width = 2, actionButton("sizePP", "Big Increase", icon = icon("plus-circle"), class = "btn-action btn-primary btn-lg")),
+        tags$div(style = "display:inline-block", width = 2, actionButton("sizePlus", "Increase Size", icon = icon("plus"), class = "btn-action btn-primary btn-sm")),
+        tags$div(style = "display:inline-block", width = 2, actionButton("sizeMinus", "Decrease Size", icon = icon("minus"), class = "btn-action btn-primary btn-sm")),
+        tags$div(style = "display:inline-block", width = 2, actionButton("sizeMM", "Big Decrease", icon = icon("minus-circle"), class = "btn-action btn-primary btn-lg")),
+        tags$div(style = "display:inline-block", width = 2, actionButton("lastStep", "Go Back", icon = icon("undo"), class = "btn-action btn-primary btn-sm")),
+        tags$div(style = "display:inline-block", width = 2, actionButton("redoAnal", "Redo Analysis", icon = icon("redo"), class = "btn-action btn-primary btn-sm"))
     )
   })
   
-  # render ARI result table
+  # Render ARI result table
   output$resTable <- DT::renderDataTable({
-    DT::datatable(
-      vs$tblARI,
-      options = list(
-        columnDefs = list(
-          list(className = "dt-center", targets = 1:6)
-        ),
-        pageLength = 5,
-        lengthMenu = c(5, 10, 15, 20)
-      ),
-      escape = FALSE,
-      selection = "single",
-      editable = "cell"
-    ) %>% DT::formatRound(columns = c(3,4), digits = 2)
+    req(xyz$tblARI)
+    DT::datatable(xyz$tblARI, options = list(columnDefs = list(list(className = "dt-center", targets = 1:7)), pageLength = 5, lengthMenu = c(5, 10, 15, 20)), escape = FALSE, selection = "single", editable = "cell") %>% DT::formatRound(columns = c(4,5), digits = 3)
+  })
+  # Create a proxy object for "resTable"
+  DTproxy <- DT::dataTableProxy("resTable", session = session)
+  
+  # Observe event based on slider changes
+  observeEvent(input$xslider, {
+    xyz$x <- input$xslider
+  })
+  observeEvent(input$yslider, {
+    xyz$y <- input$yslider
+  })
+  observeEvent(input$zslider, {
+    xyz$z <- input$zslider
   })
   
-  # observe event after user selecting a row (cluster) in table
-  observeEvent(input$resTable_rows_selected, {
-    if (!is.null(input$resTable_rows_selected)) { # check if a valid row is selected
-      if (is.na(vs$img_clus[vs$x, vs$y, vs$z])) { # check if 
-        vs$x <- vs$tblXYZ[input$resTable_rows_selected,1]
-        vs$y <- vs$tblXYZ[input$resTable_rows_selected,2]
-        vs$z <- vs$tblXYZ[input$resTable_rows_selected,3] 
-        DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-      } else if (vs$img_clus[vs$x, vs$y, vs$z] != vs$tblARI[input$resTable_rows_selected,1]) {
-        vs$x <- vs$tblXYZ[input$resTable_rows_selected,1]
-        vs$y <- vs$tblXYZ[input$resTable_rows_selected,2]
-        vs$z <- vs$tblXYZ[input$resTable_rows_selected,3]
-        DT::selectRows(DTproxy, selected = dim(fileInfo$tblARI)[1]-fileInfo$img_clus[vs$x, vs$y, vs$z]+1)
-      }
+  # Observe event based on clicking image
+  observeEvent(input$sag_click, {
+    xyz$y <- round(input$sag_click$x)
+    xyz$z <- round(input$sag_click$y)
+  })
+  observeEvent(input$cor_click, {
+    xyz$x <- round(input$cor_click$x)
+    xyz$z <- round(input$cor_click$y)
+  })
+  observeEvent(input$axi_click, {
+    xyz$x <- round(input$axi_click$x)
+    xyz$y <- round(input$axi_click$y)
+  })
+  
+  # Observe event based on the changes of xyz
+  observeEvent(c(xyz$x, xyz$y, xyz$z), {
+    req(xyz$x, xyz$y, xyz$z, xyz$tblARI, xyz$img_clus)
+    if (!is.na(xyz$img_clus[xyz$x, xyz$y, xyz$z])) {
+      n <- ifelse(is.null(dim(xyz$tblARI)), 1, dim(xyz$tblARI)[1])
+      # Check if a cluster is selected or if it's different from the current selection
+      if (is.null(input$resTable_rows_selected) ||
+          n - xyz$img_clus[xyz$x, xyz$y, xyz$z] + 1 != input$resTable_rows_selected)
+        DT::selectRows(DTproxy, selected = n - xyz$img_clus[xyz$x, xyz$y, xyz$z] + 1)
+    } else {
+      DT::selectRows(DTproxy, selected = NULL)
     }
   })
   
-  # observe event after pressing button to clear row selection
-  DTproxy <- DT::dataTableProxy("resTable", session = session)
+  # Observe event based on selecting a row (cluster) in table
+  observeEvent(input$resTable_rows_selected, {
+    req(input$resTable_rows_selected, xyz$x, xyz$y, xyz$z, xyz$img_clus, xyz$tblARI, xyz$tblXYZ)
+    n <- ifelse(is.null(dim(xyz$tblARI)), 1, dim(xyz$tblARI)[1])
+    # Check if a cluster is selected or if it's different from the current selection
+    if (is.na(xyz$img_clus[xyz$x, xyz$y, xyz$z]) || 
+        n - xyz$img_clus[xyz$x, xyz$y, xyz$z] + 1 != input$resTable_rows_selected) {
+      # Update xyz based on selection
+      xyz$x <- xyz$tblXYZ[input$resTable_rows_selected, 1]
+      xyz$y <- xyz$tblXYZ[input$resTable_rows_selected, 2]
+      xyz$z <- xyz$tblXYZ[input$resTable_rows_selected, 3]
+      shinyjs::enable("sizePlus")
+      shinyjs::enable("sizePP")
+      shinyjs::enable("sizeMinus")
+      shinyjs::enable("sizeMM")
+    }
+  })
+  
+  # Observe event after pressing button "clearRows"
   observeEvent(input$clearRows, {
     DT::selectRows(DTproxy, selected = NULL)
-    vs$x <- round((fileInfo$header$dim[2]+1)/2)
-    vs$y <- round((fileInfo$header$dim[3]+1)/2)
-    vs$z <- round((fileInfo$header$dim[4]+1)/2)
+    xyz$x <- round((fileInfo$header$dim[2]+1)/2)
+    xyz$y <- round((fileInfo$header$dim[3]+1)/2)
+    xyz$z <- round((fileInfo$header$dim[4]+1)/2)
   })
   
-  # observe event after pressing button to redo the analysis
-  observeEvent(input$redoAnalysis, {
+  # Observe event after pressing button "redoAnal"
+  observeEvent(input$redoAnal, {
     DT::selectRows(DTproxy, selected = NULL)
-    vs$x        <- round((fileInfo$header$dim[2]+1)/2)
-    vs$y        <- round((fileInfo$header$dim[3]+1)/2)
-    vs$z        <- round((fileInfo$header$dim[4]+1)/2)
-    
-    vs$tblARI   <- fileInfo$tblARI
-    vs$tblXYZ   <- fileInfo$tblXYZ
-    vs$img_clus <- fileInfo$img_clus
-    vs$img_tdps <- fileInfo$img_tdps
-    
+    xyz$x <- round((fileInfo$header$dim[2]+1)/2)
+    xyz$y <- round((fileInfo$header$dim[3]+1)/2)
+    xyz$z <- round((fileInfo$header$dim[4]+1)/2)
     shinyjs::enable("sizePlus")
+    shinyjs::enable("sizePP")
     shinyjs::enable("sizeMinus")
+    shinyjs::enable("sizeMM")
+    
+    # Form clusters
+    tdpclusters <- ARIbrain::TDPQuery(fileInfo$aricluster, threshold = input$tdpthres)
+    # Convert result clusters to result table
+    res <- ari2tbl(tdpclusters@clusterlist, fileInfo)
+    n <- length(tdpclusters@clusterlist)
+    # Update cluster & TDP maps
+    img_clus <- array(NA, fileInfo$header$dim[2:4])
+    img_tdps <- array(NA, fileInfo$header$dim[2:4])
+    for (i in 1:n) {
+      indices <- tdpclusters@aricluster@indexp[tdpclusters@clusterlist[[i]]+1]
+      img_clus[indices] <- n-i+1
+      img_tdps[indices] <- res$tblARI[i, 4]
+    }
+    # Update xyz
+    xyz$img_clus <- img_clus
+    xyz$img_tdps <- img_tdps
+    xyz$tblARI   <- res$tblARI
+    xyz$tblXYZ   <- res$tblXYZ
+    # Update fileInfo
+    fileInfo$tdpclusters <- tdpclusters
+    fileInfo$tdpchanges  <- NULL
   })
   
-  # (1) observe event after pressing button to increase size
-  observeEvent(input$sizePlus, {
-    
-    if (!is.na(vs$img_clus[vs$x, vs$y, vs$z])) {
-
-      clus1_label <- vs$img_clus[vs$x, vs$y, vs$z]
-      clus1_tdp   <- round(vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 3], 2)
-      clus1_size  <- vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2]
-      
-      # initialize a vector for marking found clusters
-      marks <- integer(fileInfo$m)
-      
-      while (clus1_tdp > fileInfo$mintdp && 
-             clus1_size == vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2]) {
-        
-        # lower TDP threshold
-        clus1_tdp <- clus1_tdp - 0.01
-        # find all maximal STCs with a TDP threshold
-        clusterlist <- ARIbrain::answerQuery(clus1_tdp, fileInfo$stcs, fileInfo$reslist$SIZE, marks, fileInfo$tdps, fileInfo$reslist$CHILD)
-        # sort clusters in descending order of cluster size
-        n <- length(clusterlist)
-        if (n > 1) {
-          cluster_sizes <- sapply(clusterlist, length)
-          d             <- diff(range(cluster_sizes))
-          maxsize       <- max(cluster_sizes)
-          if (n < 200 || d < 100000 || n*log2(d) <= sum(cluster_sizes)) {
-            clusterlist <- clusterlist[order(cluster_sizes, decreasing = TRUE)]
-          } else {
-            cluster_ord <- ARIbrain:::counting_sort(n, maxsize, cluster_sizes)
-            clusterlist <- clusterlist[cluster_ord + 1]
-          }
-        }
-        
-        # initialize the cluster map
-        clus1_img <- array(0, fileInfo$header$dim[2:4])
-        # update cluster map
-        for (i in 1:n) {
-          clus1_img[fileInfo$indexp[clusterlist[[i]]+1]] <- n-i+1
-        }
-        
-        # update cluster size
-        clus1_size <- sum(clus1_img == clus1_img[vs$x, vs$y, vs$z])
-      }
-      
-      if (clus1_tdp <= fileInfo$mintdp) {
-        # update cluster table & image
-        vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2] <- fileInfo$m
-        vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 3] <- fileInfo$mintdp
-        vs$img_clus[fileInfo$mask]                    <- clus1_label
-        
-        shinyjs::disable("sizePlus")
-        showModal(
-          modalDialog(
-            title = NULL,
-            "min(TDP) has been reached!"
-          )
-        )
-        return(NULL)
-        
-      } else {
-        
-        # update cluster table & image
-        vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2] <- clus1_size
-        vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 3] <- fileInfo$tdps[clusterlist[[n-clus1_img[vs$x, vs$y, vs$z]+1]][clus1_size]+1]
-        vs$img_clus[clus1_img == clus1_img[vs$x, vs$y, vs$z]] <- clus1_label
-      }
-      
-      DT::selectRows(DTproxy, selected = dim(vs$tblARI)[1]-vs$img_clus[vs$x, vs$y, vs$z]+1)
-      
-    } else {
-      
-      showModal(
-        modalDialog(
-          title = NULL,
-          "Please select a valid cluster!"
-        )
-      )
+  # Observe event after pressing button "lastStep"
+  observeEvent(input$lastStep, {
+    if (is.null(fileInfo$tdpclusters)) {
+      showModal(modalDialog(title = "Invalid request:", "You are only allowed to go back one step."))
       return(NULL)
-      
-    } 
-    
-  })
-  
-  # # (2) observe event after pressing button to largely increase size 
-  # observeEvent(input$sizePlusPlus, {
-  #   
-  #   if (!is.na(vs$img_clus[vs$x, vs$y, vs$z])) {
-  #     
-  #     index1    <- xyz2index(vs$x, vs$y, vs$z, fileInfo$header$dim[2:4])
-  #     img_clus  <- vs$img_clus
-  #     img_clus[is.na(img_clus)] <- 0
-  #     img_clus0 <- ChangeCluster(img_clus, fileInfo$mask, 
-  #                                fileInfo$header$dim[2:4], 
-  #                                as.numeric(input$conn), input$tdpthres, 
-  #                                index1, TRUE, TRUE, fileInfo$outputDir)
-  #     
-  #     if (length(img_clus0) > 0) {
-  #       
-  #       img_clus    <- array(img_clus0, fileInfo$header$dim[2:4])
-  #       clus_labels <- sort(unique(c(img_clus)))
-  #       clus_labels <- clus_labels[clus_labels != 0]
-  #       clus_tdps   <- read.delim(paste0(fileInfo$outputDir,
-  #                                        .Platform$file.sep, 
-  #                                        "sum_clus.txt"),
-  #                                 header = FALSE, sep = " ")[,4]
-  #       
-  #       clus_size <- integer(length(clus_labels))
-  #       clus_maxT <- numeric(length(clus_labels))
-  #       Vox_xyzs  <- matrix(0, length(clus_labels), 3)
-  #       img_tdps  <- array(0, fileInfo$header$dim[2:4])
-  #       i <- 1
-  #       for (label in clus_labels) {
-  #         minp <- min(fileInfo$data[img_clus == label & fileInfo$data > 0])
-  #         clus_size[i] <- sum(img_clus == label)
-  #         clus_maxT[i] <- -qnorm(minp)
-  #         Vox_xyzs[i,] <- which(fileInfo$data == minp, arr.ind = TRUE)
-  #         img_tdps[img_clus == label] <- clus_tdps[i]
-  #         i <- i + 1
-  #       }
-  #       
-  #       img_clus[img_clus == 0] <- NA
-  #       vs$img_clus <- img_clus
-  #       vs$img_tdps <- img_tdps
-  #       
-  #       clus_size   <- sort(clus_size, decreasing = TRUE, index.return = TRUE)
-  #       clus_labels <- clus_labels[clus_size$ix]
-  #       clus_maxT   <- clus_maxT[clus_size$ix]
-  #       Vox_xyzs    <- Vox_xyzs[clus_size$ix,]
-  #       MNI_xyzs    <- xyz2MNI(Vox_xyzs, fileInfo$header)
-  #       clus_tdps   <- clus_tdps[clus_size$ix]
-  #       clus_size   <- clus_size$x
-  #       
-  #       if (length(clus_labels) == 1) {
-  #         xyzV <- paste0("(", 
-  #                        as.integer(Vox_xyzs[1]), ", ",
-  #                        as.integer(Vox_xyzs[2]), ", ",
-  #                        as.integer(Vox_xyzs[3]), 
-  #                        ")")
-  #         xyzM <- paste0("(", 
-  #                        as.integer(MNI_xyzs[1]), ", ",
-  #                        as.integer(MNI_xyzs[2]), ", ",
-  #                        as.integer(MNI_xyzs[3]), 
-  #                        ")")
-  #       } else {
-  #         xyzV <- paste0("(", 
-  #                        as.integer(Vox_xyzs[,1]), ", ",
-  #                        as.integer(Vox_xyzs[,2]), ", ",
-  #                        as.integer(Vox_xyzs[,3]), 
-  #                        ")")
-  #         xyzM <- paste0("(", 
-  #                        as.integer(MNI_xyzs[,1]), ", ",
-  #                        as.integer(MNI_xyzs[,2]), ", ",
-  #                        as.integer(MNI_xyzs[,3]), 
-  #                        ")")
-  #       }
-  #       
-  #       if (!is.null(dim(vs$tblARI)) &
-  #           dim(fileInfo$tblARI)[1] - length(clus_labels) > 0) {
-  #         
-  #         new_label <- integer(dim(fileInfo$tblARI)[1] - 
-  #                                length(clus_labels) + 1)
-  #         i <- 1
-  #         j <- 2
-  #         for (label in fileInfo$tblARI[,1]) {
-  #           curr_label <- img_clus[fileInfo$tblXYZ[i,1], 
-  #                                  fileInfo$tblXYZ[i,2], 
-  #                                  fileInfo$tblXYZ[i,3]]
-  #           if (curr_label != label) {
-  #             new_label[1] <- curr_label
-  #             new_label[j] <- label
-  #             j <- j + 1
-  #           }
-  #           i <- i + 1
-  #         }
-  #         new_label <- sort(new_label)
-  #         clus_labels[which(clus_labels == new_label[1])] <- 
-  #           paste0(new_label, collapse = ", ")
-  #       }
-  #       
-  #       tblARI <- data.frame(label = clus_labels,
-  #                            size = as.integer(clus_size),
-  #                            tdps = clus_tdps, 
-  #                            maxT = clus_maxT,
-  #                            xyzV = xyzV, 
-  #                            xyzM = xyzM)
-  #       rownames(tblARI) <- paste0("cl", length(clus_labels):1)
-  #       colnames(tblARI) <- c("Cluster",
-  #                             "Size",
-  #                             "TDP",
-  #                             "max(Z)",
-  #                             "Voxel position<br/>(x, y, z)",
-  #                             "MNI coordinates<br/>(x, y, z)")
-  #       
-  #       vs$tblARI <- tblARI
-  #       vs$tblXYZ <- Vox_xyzs
-  #       
-  #     } else {
-  #       
-  #       showModal(
-  #         modalDialog(
-  #           title = NULL,
-  #           "min(TDP) has been reached!"
-  #         )
-  #       )
-  #       return(NULL)
-  #     }
-  #   }
-  # })
-  # 
-  # # (3) observe event after pressing button to largely decrease size
-  # observeEvent(input$sizeMinusMinus, {
-  #   
-  #   if (!is.na(vs$img_clus[vs$x, vs$y, vs$z])) {
-  #     
-  #     index1    <- xyz2index(vs$x, vs$y, vs$z, fileInfo$header$dim[2:4])
-  #     img_clus  <- vs$img_clus
-  #     img_clus[is.na(img_clus)] <- 0
-  #     img_clus0 <- ChangeCluster(img_clus, fileInfo$mask, 
-  #                                fileInfo$header$dim[2:4], 
-  #                                as.numeric(input$conn), input$tdpthres, 
-  #                                index1, FALSE, TRUE, fileInfo$outputDir)
-  #     
-  #     if (length(img_clus0) > 0) {
-  #       
-  #       img_clus    <- array(img_clus0, fileInfo$header$dim[2:4])
-  #       clus_labels <- sort(unique(c(img_clus)))
-  #       clus_labels <- clus_labels[clus_labels != 0]
-  #       # clus_tdps   <- read.delim(paste0(fileInfo$outputDir,
-  #       #                                  .Platform$file.sep, 
-  #       #                                  "sum_clus.txt"),
-  #       #                           header = FALSE, sep = " ")[,4]
-  #       
-  #       clus_size <- integer(length(clus_labels))
-  #       clus_maxT <- numeric(length(clus_labels))
-  #       Vox_xyzs  <- matrix(0, length(clus_labels), 3)
-  #       img_tdps  <- array(0, fileInfo$header$dim[2:4])
-  #       i <- 1
-  #       for (label in clus_labels) {
-  #         minp <- min(fileInfo$data[img_clus == label & fileInfo$data > 0])
-  #         clus_size[i] <- sum(img_clus == label)
-  #         clus_maxT[i] <- -qnorm(minp)
-  #         Vox_xyzs[i,] <- which(fileInfo$data == minp, arr.ind = TRUE)
-  #         img_tdps[img_clus == label] <- clus_tdps[i]
-  #         i <- i + 1
-  #       }
-  #       
-  #       img_clus[img_clus == 0] <- NA
-  #       vs$img_clus <- img_clus
-  #       vs$img_tdps <- img_tdps
-  #       
-  #       clus_size   <- sort(clus_size, decreasing = TRUE, index.return = TRUE)
-  #       clus_labels <- clus_labels[clus_size$ix]
-  #       clus_maxT   <- clus_maxT[clus_size$ix]
-  #       Vox_xyzs    <- Vox_xyzs[clus_size$ix,]
-  #       MNI_xyzs    <- xyz2MNI(Vox_xyzs, fileInfo$header)
-  #       clus_tdps   <- clus_tdps[clus_size$ix]
-  #       clus_size   <- clus_size$x
-  #       
-  #       if (length(clus_labels) == 1) {
-  #         xyzV <- paste0("(", 
-  #                        as.integer(Vox_xyzs[1]), ", ",
-  #                        as.integer(Vox_xyzs[2]), ", ",
-  #                        as.integer(Vox_xyzs[3]), 
-  #                        ")")
-  #         xyzM <- paste0("(", 
-  #                        as.integer(MNI_xyzs[1]), ", ",
-  #                        as.integer(MNI_xyzs[2]), ", ",
-  #                        as.integer(MNI_xyzs[3]), 
-  #                        ")")
-  #       } else {
-  #         xyzV <- paste0("(", 
-  #                        as.integer(Vox_xyzs[,1]), ", ",
-  #                        as.integer(Vox_xyzs[,2]), ", ",
-  #                        as.integer(Vox_xyzs[,3]), 
-  #                        ")")
-  #         xyzM <- paste0("(", 
-  #                        as.integer(MNI_xyzs[,1]), ", ",
-  #                        as.integer(MNI_xyzs[,2]), ", ",
-  #                        as.integer(MNI_xyzs[,3]), 
-  #                        ")")
-  #       }
-  #       tblARI <- data.frame(label = as.integer(clus_labels),
-  #                            size = as.integer(clus_size),
-  #                            tdps = clus_tdps, 
-  #                            maxT = clus_maxT,
-  #                            xyzV = xyzV, 
-  #                            xyzM = xyzM)
-  #       rownames(tblARI) <- paste0("cl", 1:length(clus_labels))
-  #       colnames(tblARI) <- c("Local maximum",
-  #                             "Size",
-  #                             "TDP",
-  #                             "max(Z)",
-  #                             "Voxel position<br/>(x, y, z)",
-  #                             "MNI coordinates<br/>(x, y, z)")
-  #       
-  #       vs$tblARI <- tblARI
-  #       vs$tblXYZ <- Vox_xyzs
-  #       
-  #     } else {
-  #       
-  #       showModal(
-  #         modalDialog(
-  #           title = NULL,
-  #           "min(TDP) has been reached!"
-  #         )
-  #       )
-  #       return(NULL)
-  #     }
-  #   }
-  # })
-  
-  # (4) observe event after pressing button to decrease size
-  observeEvent(input$sizeMinus, {
-    
-    if (!is.na(vs$img_clus[vs$x, vs$y, vs$z])) {
-      
-      clus1_label <- vs$img_clus[vs$x, vs$y, vs$z]
-      clus1_tdp   <- round(vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 3], 2)
-      clus1_size  <- vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2]
-      
-      # initialize a vector for marking found clusters
-      marks <- integer(fileInfo$m)
-      
-      while (clus1_tdp < 1 && clus1_size == vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2]) {
-        
-        # increase TDP threshold
-        clus1_tdp <- clus1_tdp + 0.01
-        # find all maximal STCs with a TDP threshold
-        clusterlist <- ARIbrain::answerQuery(clus1_tdp, fileInfo$stcs, fileInfo$reslist$SIZE, marks, fileInfo$tdps, fileInfo$reslist$CHILD)
-        # sort clusters in descending order of cluster size
-        n <- length(clusterlist)
-        if (n > 1) {
-          cluster_sizes <- sapply(clusterlist, length)
-          d             <- diff(range(cluster_sizes))
-          maxsize       <- max(cluster_sizes)
-          if (n < 200 || d < 100000 || n*log2(d) <= sum(cluster_sizes)) {
-            clusterlist <- clusterlist[order(cluster_sizes, decreasing = TRUE)]
-          } else {
-            cluster_ord <- ARIbrain:::counting_sort(n, maxsize, cluster_sizes)
-            clusterlist <- clusterlist[cluster_ord + 1]
-          }
-        }
-        
-        # initialize the cluster map
-        clus1_img <- array(0, fileInfo$header$dim[2:4])
-        # update cluster map
-        for (i in 1:n) {
-          clus1_img[fileInfo$indexp[clusterlist[[i]]+1]] <- n-i+1
-        }
-        
-        # update cluster size
-        clus1_size <- sum(clus1_img == clus1_img[vs$x, vs$y, vs$z])
-      }
-      
-      # update cluster table & image
-      vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 2] <- clus1_size
-      vs$tblARI[dim(vs$tblARI)[1]-clus1_label+1, 3] <- fileInfo$tdps[clusterlist[[n-clus1_img[vs$x, vs$y, vs$z]+1]][clus1_size]+1]
-      vs$img_clus[clus1_img == clus1_img[vs$x, vs$y, vs$z]] <- clus1_label
-      
-      DT::selectRows(DTproxy, selected = dim(vs$tblARI)[1]-vs$img_clus[vs$x, vs$y, vs$z]+1)
-      
-      if (clus1_tdp >= 1) {
-        shinyjs::disable("sizeMinus")
-        showModal(
-          modalDialog(
-            title = NULL,
-            "max(TDP) has been reached!"
-          )
-        )
-        return(NULL)
-      }
-      
-    } else {
-      
-      showModal(
-        modalDialog(
-          title = NULL,
-          "Please select a valid cluster!"
-        )
-      )
+    }
+    if (is.null(fileInfo$tdpchanges)) {
+      showModal(modalDialog(title = "Invalid request:", "There is no previous step to go back to."))
       return(NULL)
-      
+    }
+    shinyjs::enable("sizePlus")
+    shinyjs::enable("sizePP")
+    shinyjs::enable("sizeMinus")
+    shinyjs::enable("sizeMM")
+    
+    # Get results from last step
+    clusterlist <- fileInfo$tdpclusters@clusterlist
+    # Compute result table
+    res <- ari2tbl(clusterlist, fileInfo)
+    # Compute img_clus & img_tdps
+    n <- length(clusterlist)
+    img_clus <- array(NA, fileInfo$header$dim[2:4])
+    img_tdps <- array(NA, fileInfo$header$dim[2:4])
+    for (i in 1:n) {
+      indices <- fileInfo$aricluster@indexp[clusterlist[[i]]+1]
+      img_clus[indices] <- n-i+1
+      img_tdps[indices] <- res$tblARI[i, 4]
+    }
+    if (!is.null(xyz$x) && !is.null(xyz$y) && !is.null(xyz$z) && !is.na(img_clus[xyz$x, xyz$y, xyz$z])) {
+      DT::selectRows(DTproxy, selected = n - img_clus[xyz$x, xyz$y, xyz$z] + 1)
+    } else {
+      DT::selectRows(DTproxy, selected = NULL)
     }
     
+    # Update reactive values
+    xyz$img_clus <- img_clus
+    xyz$img_tdps <- img_tdps
+    xyz$tblARI   <- res$tblARI
+    xyz$tblXYZ   <- res$tblXYZ
+    # Update fileInfo
+    fileInfo$tdpchanges  <- fileInfo$tdpclusters
+    fileInfo$tdpclusters <- NULL
+  })
+  
+  # ----------------------------------------------------------------------------------- #
+  # ---------- NOTE: Each change corresponds to a TDP change of 0.001 / 0.01 ---------- #
+  # ----------------------------------------------------------------------------------- #
+  
+  # Observe event after pressing button "sizePlus" (increase size / decrease TDP)
+  observeEvent(input$sizePlus, {
+    req(xyz$x, xyz$y, xyz$z, xyz$img_clus)
+    sizeInc(xyz, fileInfo, DTproxy, 0.001)
+  })
+  # Observe event after pressing button "sizePP" (largely increase size / decrease TDP)
+  observeEvent(input$sizePP, {
+    req(xyz$x, xyz$y, xyz$z, xyz$img_clus)
+    sizeInc(xyz, fileInfo, DTproxy, 0.1)
+  })
+  # Observe event after pressing button "sizeMinus" (decrease size / increase TDP)
+  observeEvent(input$sizeMinus, {
+    req(xyz$x, xyz$y, xyz$z, xyz$img_clus)
+    sizeDec(xyz, fileInfo, DTproxy, 0.001)
+  })
+  # Observe event after pressing button "sizeMM" (largely decrease size / increase TDP)
+  observeEvent(input$sizeMM, {
+    req(xyz$x, xyz$y, xyz$z, xyz$img_clus)
+    sizeDec(xyz, fileInfo, DTproxy, 0.1)
   })
   
 }
 
-makeMenu5 <- function(input, output, session) {
-  
-  # observe event after pressing the button
+makeMenu5 <- function(input, output, session, fileInfo, xyz) {
   observeEvent(input$interButton, {
-    observeMenu5(input, output, session)
+    observeMenu5(input, output, session, fileInfo, xyz)
   })
-  
 }
-
-
