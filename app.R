@@ -1,10 +1,10 @@
 ## --------------- (0) Preparation --------------- ##
 
-# By default, Shiny limits file uploads to 5MB per file. This limit is modified
-# by using the shiny.maxRequestSize option to 100MB.
+# By default, Shiny limits file uploads to 5MB per file. This limit 
+# is modified by using the shiny.maxRequestSize option to 100MB.
 options(shiny.maxRequestSize = 100*1024^2)
 
-# load libraries
+# Load required libraries
 packages <- c("shiny", 
               "shinyjs",
               "shinydashboard",
@@ -13,143 +13,105 @@ packages <- c("shiny",
               "Rcpp",
               "hommel",
               "ARIbrain")
+# Install missing packages and load packages
 pkgs <- packages[!(packages %in% installed.packages()[, "Package"])]
-if (length(pkgs)) {
-  install.packages(pkgs, dependencies = TRUE) 
-}
-suppressPackageStartupMessages(
-  invisible(sapply(packages, require, character.only = TRUE))
-)
+if (length(pkgs)) install.packages(pkgs, dependencies = TRUE) 
+suppressPackageStartupMessages(invisible(sapply(packages, require, character.only = TRUE)))
 
-# source necessary scripts
-source("utils.R")
-source("menu1.R")
-source("menu2.R")
-source("menu3.R")
-source("menu4.R")
-source("menu5.R")
+# Source necessary scripts dynamically
+scripts <- c("utils.R", 
+             "menu1.R", 
+             "menu2.R", 
+             "menu3.R", 
+             "menu4.R", 
+             "menu5.R")
+lapply(scripts, source)
 
-# define package version
-appVersion <- "0.1.2"
+# Define package version
+appVersion <- "0.1.3"
 
 ## --------------- (1) Define UI --------------- ##
 ## using "shinydashboard" ##
 
-# define header
+# Define header
 header <- dashboardHeader(
-  title = "ARIbrain"
-  #title = paste0("ARIbrain v", appVersion)
+  #title = "ARIbrain"
+  title = paste0("ARIbrain v", appVersion)
 )
 
-# define sidebar
+# Define sidebar
 sidebar <- dashboardSidebar(
   sidebarMenu(id = "tabs", sidebarMenuOutput("menu"))
 )
 
-# define body
+# Define body
 body <- dashboardBody(
-  
-  ## using "shinyjs" ##
+  ## Using "shinyjs" ##
   shinyjs::useShinyjs(),
   
   tabItems(
-    # 1st tab content
-    tabItem(
-      tabName = "menu1",
-      fluidRow(
-        uiOutput("dataBox"),
-        uiOutput("infoBox")
-      ),
-      fluidRow(
-        uiOutput("buttonBox")
-      )
-    ),
+    # Tab 1: menu1
+    tabItem(tabName = "menu1", 
+            fluidRow(uiOutput("dataBox"), uiOutput("infoBox")),
+            fluidRow(uiOutput("buttonBox"))),
     
-    # 2nd tab content
-    tabItem(
-      tabName = "menu2",
-      fluidRow(
-        uiOutput("autoBox"),
-        uiOutput("maskBox")
-      ),
-      fluidRow(
-        uiOutput("sagBox"),
-        uiOutput("corBox"),
-        uiOutput("axiBox")
-      )
-    ),
+    # Tab 2: menu2
+    tabItem(tabName = "menu2", 
+            fluidRow(uiOutput("autoBox"), uiOutput("maskBox")),
+            fluidRow(uiOutput("sagBox"), uiOutput("corBox"), uiOutput("axiBox"))),
     
-    # 3rd tab content
-    tabItem(
-      tabName = "menu3",
-      fluidRow(
-        uiOutput("setBox")
-      ),
-      fluidRow(
-        uiOutput("runBox")
-      )
-    ),
+    # Tab 3: menu3
+    tabItem(tabName = "menu3",
+            fluidRow(uiOutput("setBox")),
+            fluidRow(uiOutput("runBox"))),
     
-    # 4th tab content
-    tabItem(
-      tabName = "menu4",
-      fluidRow(
-        uiOutput("thresBox"),
-        uiOutput("cftBox")
-      ),
-      fluidRow(
-        uiOutput("sagResultBox"),
-        uiOutput("corResultBox"),
-        uiOutput("axiResultBox")
-      ),
-      fluidRow(
-        uiOutput("dlBox")
-      ),
-      fluidRow(
-        uiOutput("interBox")
-      )
-    ),
+    # Tab 4: menu4
+    tabItem(tabName = "menu4",
+            fluidRow(uiOutput("thresBox"), uiOutput("cftBox")),
+            fluidRow(uiOutput("sagResultBox"), uiOutput("corResultBox"), uiOutput("axiResultBox")),
+            fluidRow(uiOutput("dlBox")),
+            fluidRow(uiOutput("tblBox")),
+            fluidRow(uiOutput("interBox"))),
     
-    # 5th tab content
-    tabItem(
-      tabName = "menu5",
-      fluidRow(
-        uiOutput("boundBox")
-      ),
-      fluidRow(
-        uiOutput("sagResBox"),
-        uiOutput("corResBox"),
-        uiOutput("axiResBox")
-      ),
-      fluidRow(
-        uiOutput("dlBox2")
-      ),
-      fluidRow(
-        uiOutput("tableBox")
-      )
+    # Tab 5: menu5
+    tabItem(tabName = "menu5",
+            fluidRow(uiOutput("boundBox")),
+            fluidRow(uiOutput("sagResBox"), uiOutput("corResBox"), uiOutput("axiResBox")),
+            fluidRow(uiOutput("dlBox2")),
+            fluidRow(uiOutput("tableBox")))
     )
-  )
 )
 
-# define UI
+# Define UI
 ui <- dashboardPage(header, sidebar, body)
 
 
 ## --------------- (2) Define server logic --------------- ##
 server <- function(input, output, session) {
   
-  # set global variables
-  fileInfo <<- NULL
+  # Define reactive values for fileInfo
+  fileInfo <- reactiveValues(type = "u", df = 0, twosided = TRUE, valid = FALSE, selected = "unknown", filename = NULL, 
+                             conc_thres = NULL, mintdp = NULL, header = NULL, data = NULL, pval = NULL, mask = NULL, 
+                             map_grad = NULL, aricluster = NULL, tdpclusters = NULL, tdpchanges = NULL)
   
-  makeMenu1(input, output, session)
+  # Define reactive values for xyz
+  xyz <- reactiveValues(x = NULL, y = NULL, z = NULL, img_tdps = NULL, img_clus = NULL, tblARI = NULL, tblXYZ = NULL)
   
-  makeMenu2(input, output, session)
+  # Observe event after updating fileInfo
+  observeEvent(fileInfo$header, {
+    req(fileInfo$header)
+    xyz$x <- round((fileInfo$header$dim[2]+1)/2)
+    xyz$y <- round((fileInfo$header$dim[3]+1)/2)
+    xyz$z <- round((fileInfo$header$dim[4]+1)/2)
+  })
   
-  makeMenu3(input, output, session)
+  # Create menus
+  makeMenu1(input, output, session, fileInfo, xyz)
+  makeMenu2(input, output, session, fileInfo, xyz)
+  makeMenu3(input, output, session, fileInfo, xyz)
+  makeMenu4(input, output, session, fileInfo, xyz)
+  makeMenu5(input, output, session, fileInfo, xyz)
   
-  makeMenu4(input, output, session)
-  
-  makeMenu5(input, output, session)
 }
 
 

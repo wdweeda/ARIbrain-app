@@ -1,220 +1,134 @@
 # -------------------- menu2 -------------------- #
 
-observeMenu2 <- function(input, output, session) {
+observeMenu2 <- function(input, output, session, fileInfo, xyz) {
   
-  # render sidebar tab
+  # Render sidebar tab
   output$menu <- renderMenu({
     sidebarMenu(
-      menuItem(
-        "Input data", 
-        tabName = "menu1",
-        icon = icon("file-import")
-      ),
-      menuItem(
-        "Brain mask",
-        tabName = "menu2",
-        icon = icon("sliders-h")
-      )
+      menuItem("Input data", tabName = "menu1", icon = icon("file-import")),
+      menuItem("Brain mask", tabName = "menu2", icon = icon("sliders-h"))
     )
   })
   isolate({updateTabItems(session, "tabs", "menu2")})
 
-  # render checkbox (UI)
+  # Render checkbox "autoMask" (UI)
   output$autoBox <- renderUI({
-    box(
-      title = "Import Brain Mask",
-      status = "primary",
-      solidHeader = TRUE,
-      collapsible = FALSE,
-      width = 6,
-      height = "100%",
-      checkboxInput(
-        "autoMask",
-        label = "Brain mask is auto-determined from the non-null & 
-                 non-zero input data. (Please uncheck the box if you 
-                 want to import the brain mask.)",
-        value = TRUE
-      ),
-      tags$div(
-        style = "display: inline-block;",
-        actionButton("toAnalysisButton", "To analysis settings >>",
-                     style = "background-color: #3c8dbc;
-                              color: #fff;
-                              border-color: #717878;"),
-        tags$div(
-          style = "display: inline-block; width: 1em;",
-          HTML("<br>")
-        ),
-        tags$div(
-          style = "display: inline-block;",
-          helpText("Note: brain mask cannot be changed 
-                    after pressing this button.")
-        )
-      )
-    )
+    box(title = "Import Brain Mask", status = "primary", solidHeader = TRUE, collapsible = FALSE, width = 6, height = "100%", 
+        checkboxInput("autoMask", label = "Brain mask is auto-determined from the non-NA data. Please uncheck the box if you want to import a custom brain mask.", value = TRUE),
+        tags$div(style = "display: inline-block;", actionButton("toAnalysisButton", "To analysis settings >>", style = "background-color: #3c8dbc; color: #fff; border-color: #717878;"), tags$div(style = "display: inline-block; width: 1em;", HTML("<br>")),
+                 tags$div(style = "display: inline-block;", helpText("NOTE: The brain mask cannot be changed after this button is pressed."))))
   })
   
-  # create reactive values
-  xyz <- reactiveValues(
-    x = round((fileInfo$header$dim[2]+1)/2),
-    y = round((fileInfo$header$dim[3]+1)/2),
-    z = round((fileInfo$header$dim[4]+1)/2),
-    mask = fileInfo$mask
-  )
+  # Render image boxes (sagittal, coronal & axial views) (UI)
+  output$sagBox <- renderUI({
+    req(xyz$x, fileInfo$header)
+    box(width = 4, background = "black", 
+        sliderInput("slider_x", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[2], value = xyz$x),
+        plotOutput("maskSagittal", click = "click_sag_yz"))
+  })
+  output$corBox <- renderUI({
+    req(xyz$y, fileInfo$header)
+    box(width = 4, background = "black",
+        sliderInput("slider_y", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[3], value = xyz$y),
+        plotOutput("maskCoronal", click = "click_cor_xz"))
+  })
+  output$axiBox <- renderUI({
+    req(xyz$z, fileInfo$header)
+    box(width = 4, background = "black",
+        sliderInput("slider_z", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[4], value = xyz$z),
+        plotOutput("maskAxial", click = "click_axi_xy"))
+  })
+  
+  # Update mask plots
+  output$maskSagittal <- renderPlot({
+    req(xyz$x, xyz$y, xyz$z, fileInfo$header, fileInfo$mask)
+    plotImage(fileInfo$mask, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("sag"))
+    abline(h = xyz$z, v = xyz$y, col = "green")
+  })
+  output$maskCoronal <- renderPlot({
+    req(xyz$x, xyz$y, xyz$z, fileInfo$header, fileInfo$mask)
+    plotImage(fileInfo$mask, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("cor"))
+    abline(h = xyz$z, v = xyz$x, col = "green")
+  })
+  output$maskAxial <- renderPlot({
+    req(xyz$x, xyz$y, xyz$z, fileInfo$header, fileInfo$mask)
+    plotImage(fileInfo$mask, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("axi"))
+    abline(h = xyz$y, v = xyz$x, col = "green")
+  })
 
-  # observe event after user unchecking the checkbox
+  # Observe event after unchecking checkbox "autoMask"
   observeEvent(input$autoMask, {
-
-    if(input$autoMask == FALSE) {
+    if (input$autoMask == FALSE) {
       shinyjs::enable("maskFile")
       shinyjs::disable("toAnalysisButton")
       output$maskBox <- renderUI({
-        box(
-          solidHeader = TRUE,
-          collapsible = FALSE,
-          width = 6,
-          fileInput("maskFile", label = "Load mask file")
-        )
+        box(solidHeader = TRUE, collapsible = FALSE, width = 6, fileInput("maskFile", label = "Load mask file"))
       })
     } else {
       shinyjs::disable("maskFile")
       shinyjs::enable("toAnalysisButton")
       output$maskBox <- NULL
-      # update brain mask
-      xyz$mask       <- (!is.na(fileInfo$data)) & (fileInfo$data!=0)
-      fileInfo$mask <<- (!is.na(fileInfo$data)) & (fileInfo$data!=0)
+      # Update brain mask
+      fileInfo$mask <- !is.na(fileInfo$data)
     }
   })
 
-  # observe event after loading brain mask
+  # Observe event after loading brain mask
   observeEvent(input$maskFile, {
-
-    file.rename(
-      input$maskFile$datapath, paste0(
-        dirname(input$maskFile$datapath),
-        .Platform$file.sep, input$maskFile$name
-      )
-    )
     
-    mask <- try(
-      suppressWarnings(
-        RNifti::readNifti(
-          paste0(
-            dirname(input$maskFile$datapath),
-            .Platform$file.sep, input$maskFile$name
-          )
-        )
-      ), silent = TRUE
-    )
+    # Rename mask for easier handling
+    file.rename(input$maskFile$datapath, file.path(dirname(input$maskFile$datapath), input$maskFile$name))
     
-    if(class(mask)[1] == "try-error") {
+    # Try reading the mask file
+    mask <- tryCatch(
+      suppressWarnings(RNifti::readNifti(file.path(dirname(input$maskFile$datapath), input$maskFile$name))),
+      error = function(e) {  # return an error message if an error occurs
+        message("Error reading mask: ", e$message)
+        return(NULL)
+      }
+    )
+    if (is.null(mask)) {
       shinyjs::disable("toAnalysisButton")
-      showModal(
-        modalDialog(
-          title = "Invalid File Type",
-          "You selected an invalid file type."
-        )
-      )
+      showModal(modalDialog(title = "Invalid File Type", "You selected an invalid mask."))
       return(NULL)
     }
     
+    # Read the mask header
     header <- RNifti::niftiHeader(mask)
-    
-    if(header$dim[1] != 3) {
+    if (header$dim[1] != 3) {
       shinyjs::disable("toAnalysisButton")
-      showModal(
-        modalDialog(
-          title = "Invalid Dimensions",
-          "Nifti-file has invalid dimensions."
-        )
-      )
+      showModal(modalDialog(title = "Invalid Dimensions", "The mask file has invalid dimensions."))
+      return(NULL)
+    } else if (any(header$dim[2:4] != fileInfo$header$dim[2:4])) {
+      shinyjs::disable("toAnalysisButton")
+      showModal(modalDialog(title = "Inconsistent Dimensions", "The brain mask and the input data have different dimensions."))
       return(NULL)
     }
-
-    if(any(header$dim[2:4] != fileInfo$header$dim[2:4])) {
-      shinyjs::disable("toAnalysisButton")
-      showModal(
-        modalDialog(
-          title = "Inconsistent Dimensions",
-          "Brain mask & input data have different dimensions."
-        )
-      )
-      return(NULL)
-    }
-    
     shinyjs::enable("toAnalysisButton")
-    # update brain mask
-    xyz$mask       <- (!is.na(fileInfo$data)) & (mask!=0)
-    fileInfo$mask <<- (!is.na(fileInfo$data)) & (mask!=0)
+    
+    # Update brain mask
+    fileInfo$mask <- (!is.na(fileInfo$data)) & (mask!=0)
   })
   
-  # observe event after pressing the button
+  # Observe event after pressing button "toAnalysisButton"
   observeEvent(input$toAnalysisButton, {
-    
     shinyjs::disable("autoMask")
-    
-    if (input$autoMask == FALSE) {
-      shinyjs::disable("maskFile")
-    }
-    
     shinyjs::disable("toAnalysisButton")
-  })
-
-  # render image boxes (sagittal, coronal & axial views) (UI)
-  output$sagBox <- renderUI({
-    box(
-      width = 4,
-      background = "black",
-      sliderInput("slider_x", label = NULL, step = 1,
-                  min = 1, max = fileInfo$header$dim[2],
-                  value = xyz$x),
-      plotOutput("maskSagittal", click = "click_sag_yz")
-    )
+    if (input$autoMask == FALSE) shinyjs::disable("maskFile")
   })
   
-  output$corBox <- renderUI({
-    box(
-      width = 4,
-      background = "black",
-      sliderInput("slider_y", label = NULL, step = 1,
-                  min = 1, max = fileInfo$header$dim[3],
-                  value = xyz$y),
-      plotOutput("maskCoronal", click = "click_cor_xz")
-    )
+  # Observe event based on slider changes
+  observeEvent(input$slider_x, {
+    xyz$x <- input$slider_x
+  })
+  observeEvent(input$slider_y, {
+    xyz$y <- input$slider_y
+  })
+  observeEvent(input$slider_z, {
+    xyz$z <- input$slider_z
   })
   
-  output$axiBox <- renderUI({
-    box(
-      width = 4,
-      background = "black",
-      sliderInput("slider_z", label = NULL, step = 1,
-                  min = 1, max = fileInfo$header$dim[4],
-                  value = xyz$z),
-      plotOutput("maskAxial", click = "click_axi_xy")
-    )
-  })
-  
-  # update mask plots
-  output$maskSagittal <- renderPlot({
-    plotImage(xyz$mask, fileInfo$header$dim[2:4],
-              xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), 
-              FALSE, zlim = c(0,1), views = c("sag"))
-    abline(h = xyz$z, v = xyz$y, col = "green")
-  })
-  output$maskCoronal <- renderPlot({
-    plotImage(xyz$mask, fileInfo$header$dim[2:4],
-              xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1),
-              FALSE, zlim = c(0,1), views = c("cor"))
-    abline(h = xyz$z, v = xyz$x, col = "green")
-  })
-  output$maskAxial <- renderPlot({
-    plotImage(xyz$mask, fileInfo$header$dim[2:4],
-              xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1),
-              FALSE, zlim = c(0,1), views = c("axi"))
-    abline(h = xyz$y, v = xyz$x, col = "green")
-  })
-
-  # observe event after user clicking the image
+  # Observe event based on clicking image
   observeEvent(input$click_sag_yz, {
     xyz$y <- round(input$click_sag_yz$x)
     xyz$z <- round(input$click_sag_yz$y)
@@ -228,24 +142,10 @@ observeMenu2 <- function(input, output, session) {
     xyz$y <- round(input$click_axi_xy$y)
   })
 
-  # observe event after user changing the sliders
-  observeEvent(input$slider_x, {
-    xyz$x <- input$slider_x
-  })
-  observeEvent(input$slider_y, {
-    xyz$y <- input$slider_y
-  })
-  observeEvent(input$slider_z, {
-    xyz$z <- input$slider_z
-  })
-
 }
 
-makeMenu2 <- function(input, output, session) {
-  
-  # observe event after pressing the button
+makeMenu2 <- function(input, output, session, fileInfo, xyz) {
   observeEvent(input$toMaskButton, {
-    observeMenu2(input, output, session)
+    observeMenu2(input, output, session, fileInfo, xyz)
   })
-  
 }
