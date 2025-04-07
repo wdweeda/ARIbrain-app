@@ -23,37 +23,39 @@ observeMenu2 <- function(input, output, session, fileInfo, xyz) {
   output$sagBox <- renderUI({
     req(xyz$x, fileInfo$header)
     box(width = 4, background = "black", 
-        sliderInput("slider_x", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[2], value = xyz$x),
+        sliderInput("slider_x", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[2], value = ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-xyz$x+1, xyz$x)),
         plotOutput("maskSagittal", click = "click_sag_yz"))
   })
   output$corBox <- renderUI({
     req(xyz$y, fileInfo$header)
     box(width = 4, background = "black",
-        sliderInput("slider_y", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[3], value = xyz$y),
+        sliderInput("slider_y", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[3], value = ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-xyz$y+1, xyz$y)),
         plotOutput("maskCoronal", click = "click_cor_xz"))
   })
   output$axiBox <- renderUI({
     req(xyz$z, fileInfo$header)
     box(width = 4, background = "black",
-        sliderInput("slider_z", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[4], value = xyz$z),
+        sliderInput("slider_z", label = NULL, step = 1, min = 1, max = fileInfo$header$dim[4], value = ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-xyz$z+1, xyz$z)),
         plotOutput("maskAxial", click = "click_axi_xy"))
   })
   
-  # Update mask plots
+  # Update mask plots - sagittal view (x-plane)
   output$maskSagittal <- renderPlot({
     req(xyz$x, xyz$y, xyz$z, fileInfo$header, fileInfo$mask)
-    plotImage(fileInfo$mask, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("sag"))
-    abline(h = xyz$z, v = xyz$y, col = "green")
+    plotImage(fileInfo$mask, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("sag"))
+    abline(h = ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-xyz$z+1, xyz$z), v = ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-xyz$y+1, xyz$y), col = "green")
   })
+  # Update mask plots - coronal view (y-plane)
   output$maskCoronal <- renderPlot({
     req(xyz$x, xyz$y, xyz$z, fileInfo$header, fileInfo$mask)
-    plotImage(fileInfo$mask, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("cor"))
-    abline(h = xyz$z, v = xyz$x, col = "green")
+    plotImage(fileInfo$mask, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("cor"))
+    abline(h = ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-xyz$z+1, xyz$z), v = ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-xyz$x+1, xyz$x), col = "green")
   })
+  # Update mask plots - axial view (z-plane)
   output$maskAxial <- renderPlot({
     req(xyz$x, xyz$y, xyz$z, fileInfo$header, fileInfo$mask)
-    plotImage(fileInfo$mask, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("axi"))
-    abline(h = xyz$y, v = xyz$x, col = "green")
+    plotImage(fileInfo$mask, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, gray.colors(64, 0, 1), FALSE, zlim = c(0,1), views = c("axi"))
+    abline(h = ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-xyz$y+1, xyz$y), v = ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-xyz$x+1, xyz$x), col = "green")
   })
 
   # Observe event after unchecking checkbox "autoMask"
@@ -82,28 +84,30 @@ observeMenu2 <- function(input, output, session, fileInfo, xyz) {
     # Try reading the mask file
     mask <- tryCatch(
       suppressWarnings(RNifti::readNifti(file.path(dirname(input$maskFile$datapath), input$maskFile$name))),
-      error = function(e) {  # return an error message if an error occurs
+      error = function(e) {
         message("Error reading mask: ", e$message)
         return(NULL)
       }
     )
     if (is.null(mask)) {
-      shinyjs::disable("toAnalysisButton")
-      showModal(modalDialog(title = "Invalid File Type", "You selected an invalid mask."))
-      return(NULL)
+      stop("Input mask is NULL. Please upload a valid NIfTI file.")
     }
     
-    # Read the mask header
-    header <- RNifti::niftiHeader(mask)
-    if (header$dim[1] != 3) {
-      shinyjs::disable("toAnalysisButton")
-      showModal(modalDialog(title = "Invalid Dimensions", "The mask file has invalid dimensions."))
-      return(NULL)
-    } else if (any(header$dim[2:4] != fileInfo$header$dim[2:4])) {
-      shinyjs::disable("toAnalysisButton")
-      showModal(modalDialog(title = "Inconsistent Dimensions", "The brain mask and the input data have different dimensions."))
-      return(NULL)
-    }
+    # Read & check mask header
+    hdr <- RNifti::niftiHeader(mask)
+    shinyjs::disable("toAnalysisButton")
+    if (is.null(hdr))
+      stop("Invalid Mask: Header information is NULL.")
+    if (hdr$dim[1] != 3)
+      stop("Invalid Mask Dimensions: The NIfTI file must be 3D; it has invalid dimensions.")
+    if (any(hdr$dim[2:4] != fileInfo$header$dim[2:4]))
+      stop("Inconsistent Dimensions: Mismatch between data and mask dimensions.")
+    # if (!"srow_x" %in% names(hdr) || !"srow_y" %in% names(hdr) || !"srow_z" %in% names(hdr))
+    #   stop("Invalid Mask Header: Missing sform affine matrix components (srow_x, srow_y, srow_z).")
+    # if (!all.equal(hdr$srow_x, fileInfo$header$srow_x) || !all.equal(hdr$srow_y, fileInfo$header$srow_y) || !all.equal(hdr$srow_z, fileInfo$header$srow_z))
+    #   stop("Inconsistent sform Matrix: Mismatch between data and mask headers. Potential misalignment...")
+    if (!identical(RNifti::xform(hdr), RNifti::xform(fileInfo$header)))
+      stop("Inconsistent sform Matrix: Mismatch between data and mask headers. Potential misalignment...")
     shinyjs::enable("toAnalysisButton")
     
     # Update brain mask
@@ -119,27 +123,27 @@ observeMenu2 <- function(input, output, session, fileInfo, xyz) {
   
   # Observe event based on slider changes
   observeEvent(input$slider_x, {
-    xyz$x <- input$slider_x
+    xyz$x <- ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-input$slider_x+1, input$slider_x)
   })
   observeEvent(input$slider_y, {
-    xyz$y <- input$slider_y
+    xyz$y <- ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-input$slider_y+1, input$slider_y)
   })
   observeEvent(input$slider_z, {
-    xyz$z <- input$slider_z
+    xyz$z <- ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-input$slider_z+1, input$slider_z)
   })
   
   # Observe event based on clicking image
   observeEvent(input$click_sag_yz, {
-    xyz$y <- round(input$click_sag_yz$x)
-    xyz$z <- round(input$click_sag_yz$y)
+    xyz$y <- ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-round(input$click_sag_yz$x)+1, round(input$click_sag_yz$x))
+    xyz$z <- ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-round(input$click_sag_yz$y)+1, round(input$click_sag_yz$y))
   })
   observeEvent(input$click_cor_xz, {
-    xyz$x <- round(input$click_cor_xz$x)
-    xyz$z <- round(input$click_cor_xz$y)
+    xyz$x <- ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-round(input$click_cor_xz$x)+1, round(input$click_cor_xz$x))
+    xyz$z <- ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-round(input$click_cor_xz$y)+1, round(input$click_cor_xz$y))
   })
   observeEvent(input$click_axi_xy, {
-    xyz$x <- round(input$click_axi_xy$x)
-    xyz$y <- round(input$click_axi_xy$y)
+    xyz$x <- ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-round(input$click_axi_xy$x)+1, round(input$click_axi_xy$x))
+    xyz$y <- ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-round(input$click_axi_xy$y)+1, round(input$click_axi_xy$y))
   })
 
 }

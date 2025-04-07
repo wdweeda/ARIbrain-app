@@ -19,27 +19,45 @@ checkFileType <- function(inFile, fileInfo) {
   )
   
   if (!is.null(data)) {
+    
+    # Extract header
+    hdr <- RNifti::niftiHeader(data)
+    # Check header
+    if (is.null(hdr)) 
+      stop("Invalid File: Header information is NULL.")
+    if (hdr$dim[1] != 3) 
+      stop("Invalid Dimensions: The NIfTI file must be 3D; it has invalid dimensions.")
+    # if (!"srow_x" %in% names(hdr) || !"srow_y" %in% names(hdr) || !"srow_z" %in% names(hdr))
+    #   stop("Invalid Header: Missing sform affine matrix components (srow_x, srow_y, srow_z).")
+    # if (all(hdr$srow_x == 0) && all(hdr$srow_y == 0) && all(hdr$srow_z == 0))
+    #   stop("Undefined Spatial Orientation: All sform affine matrix components (srow_x, srow_y, srow_z) are zero.")
+    
+    # Find axis flipping conditions 
+    # (The default for NIfTI is RAS+ orientation, but we use LAS for visualisation)
+    sform <- RNifti::xform(hdr)
+    fileInfo$flip_x <- sform[1,1] > 0
+    fileInfo$flip_y <- sform[2,2] < 0
+    fileInfo$flip_z <- sform[3,3] < 0
+    
+    # Update fileInfo
+    fileInfo$header <- hdr
     fileInfo$valid <- TRUE
     fileInfo$data <- data
     fileInfo$mask <- !is.na(data)
     
-    # Extract header
-    header <- RNifti::niftiHeader(data)
-    fileInfo$header <- header
-    
     # Determine type based on intent_code
-    fileInfo$type <- switch(as.character(header$intent_code), "3" = "t", "5" = "z", "22" = "p", "u")
+    fileInfo$type <- switch(as.character(hdr$intent_code), "3" = "t", "5" = "z", "22" = "p", "u")
     
     # If intent_code is unknown, try using descrip field
-    if (fileInfo$type == "u" && !is.null(header$descrip)) {
-      if (grepl("SPM\\{T", header$descrip)) fileInfo$type <- "t"
+    if (fileInfo$type == "u" && !is.null(hdr$descrip)) {
+      if (grepl("SPM\\{T", hdr$descrip)) fileInfo$type <- "t"
     }
     
     # Attempt to extract degrees of freedom (df) from descrip
     df <- tryCatch(
-      as.numeric(strsplit(strsplit(header$descrip, "\\[")[[1]], "\\]")[[2]][1]),
+      as.numeric(strsplit(strsplit(hdr$descrip, "\\[")[[1]], "\\]")[[2]][1]),
       error = function(e) {
-        message("Error extracting df from the header: ", e$message)
+        message("Unable to extract df from the header: ", e$message)
         return(NA)
       }
     )
@@ -47,28 +65,22 @@ checkFileType <- function(inFile, fileInfo) {
     
     # Set selected type for UI dropdown
     fileInfo$selected <- switch(fileInfo$type, "t" = "t-map", "z" = "z-map", "p" = "p-map", "unknown")
+  } else {
+    stop("Input data is NULL. Please upload a valid NIfTI file.")
   }
 }
 
 
-# ---------- (2) Define plotting functions ----------
-plotImage <- function(data, dims, x, y, z, colrng, overlay, zlim, views = c("sag", "cor", "axi")) {
-  par(mar = c(0,0,0,0), oma = c(0,0,0,0))
-  if ("sag" %in% views) 
-    image(1:dims[2], 1:dims[3], data[x,,], col = colrng, add = overlay, zlim = zlim, axes = FALSE, xlab = "", ylab = "")
-  if ("cor" %in% views) 
-    image(1:dims[1], 1:dims[3], data[,y,], col = colrng, add = overlay, zlim = zlim, axes = FALSE, xlab = "", ylab = "")
-  if ("axi" %in% views) 
-    image(1:dims[1], 1:dims[2], data[,,z], col = colrng, add = overlay, zlim = zlim, axes = FALSE, xlab = "", ylab = "")
-}
-
-
-# ---------- (3) Convert voxel location to MNI coordinates ----------
-# vox - (nrow x 3) matrix
+# ---------- (2) Convert Voxel coordinates to MNI coordinates ----------
+# vox - Voxel coordinates (nrow x 3)
 xyz2MNI <- function(vox, hdr) {
-  if (is.null(hdr) || !"srow_x" %in% names(hdr) || !"srow_y" %in% names(hdr) || !"srow_z" %in% names(hdr)) 
-    stop("Invalid header object: It must contain srow_x, srow_y, and srow_z fields.")
-  transMatrix <- rbind(hdr$srow_x, hdr$srow_y, hdr$srow_z)  # transformation matrix
+  if (is.null(hdr)) return(vox)
+  if (hdr$dim[1] != 3) return(vox)
+  # if (!"srow_x" %in% names(hdr) || !"srow_y" %in% names(hdr) || !"srow_z" %in% names(hdr)) return(vox)
+  # if (all(hdr$srow_x == 0) && all(hdr$srow_y == 0) && all(hdr$srow_z == 0)) return(vox)
+  # sform affine transformation matrix (3 x 4)
+  transMatrix <- RNifti::xform(hdr)[1:3,]
+  # transMatrix <- rbind(hdr$srow_x, hdr$srow_y, hdr$srow_z)
   if (is.null(dim(vox))) {
     return(transMatrix %*% c(vox-1, 1))
   } else {
@@ -77,12 +89,64 @@ xyz2MNI <- function(vox, hdr) {
 }
 
 
-# ---------- (4) Convert clusterlist to result table ----------
+# ---------- (3) Convert MNI coordinates to Voxel coordinates ----------
+# mni - MNI coordinates (nrow x 3)
+mni2XYZ <- function(mni, hdr) {
+  if (is.null(hdr)) return(mni)
+  if (hdr$dim[1] != 3) return(mni)
+  # if (!"srow_x" %in% names(hdr) || !"srow_y" %in% names(hdr) || !"srow_z" %in% names(hdr)) return(mni)
+  # if (all(hdr$srow_x == 0) && all(hdr$srow_y == 0) && all(hdr$srow_z == 0)) return(mni)
+  # sform affine transformation matrix
+  transMatrix <- RNifti::xform(hdr)
+  # transMatrix <- rbind(hdr$srow_x, hdr$srow_y, hdr$srow_z, c(0, 0, 0, 1))
+  if (det(transMatrix) == 0) stop("sform affine matrix is singular and cannot be inverted.")
+  invTransMatrix <- solve(transMatrix)
+  if (is.null(dim(mni))) {
+    return(round(invTransMatrix[1:3,] %*% c(mni, 1)) + 1)
+  } else {
+    return(round(t(invTransMatrix[1:3,] %*% t(cbind(mni, rep(1, nrow(mni)))))) + 1)
+  }
+}
+
+
+# ---------- (4) Define plotting functions ----------
+plotImage <- function(data, hdr, x, y, z, flip_x, flip_y, flip_z, colrng, overlay, zlim, views = c("sag", "cor", "axi")) {
+  # Image dimensions
+  dims <- hdr$dim[2:4]
+  
+  # Flip the data based on sform (srow_x, srow_y, srow_z)
+  x_ids <- if (flip_x) dims[1]:1 else 1:dims[1]
+  y_ids <- if (flip_y) dims[2]:1 else 1:dims[2]
+  z_ids <- if (flip_z) dims[3]:1 else 1:dims[3]
+  
+  # Set up plotting layout
+  par(mar = c(0,0,0,0), oma = c(0,0,0,0))
+  
+  # Plot sagittal view (x-plane) - along y and z axes
+  if ("sag" %in% views) {
+    image(1:dims[2], 1:dims[3], data[x, y_ids, z_ids], col = colrng, add = overlay, zlim = zlim, axes = FALSE, xlab = "", ylab = "")
+  }
+  
+  # Plot coronal view (y-plane) - along x and z axes
+  if ("cor" %in% views) {
+    image(1:dims[1], 1:dims[3], data[x_ids, y, z_ids], col = colrng, add = overlay, zlim = zlim, axes = FALSE, xlab = "", ylab = "")
+  }
+  
+  # Plot axial view (z-plane) - along x and y axes
+  if ("axi" %in% views) {
+    image(1:dims[1], 1:dims[2], data[x_ids, y_ids, z], col = colrng, add = overlay, zlim = zlim, axes = FALSE, xlab = "", ylab = "")
+  }
+}
+
+
+# ---------- (5) Convert clusterlist to result table ----------
 ari2tbl <- function(clusterlist, fileInfo) {
-  n <- length(clusterlist)  # number of clusters found
+  
+  # Compute number of clusters found
+  n <- length(clusterlist)
   
   # Sort clusters by descending size
-  if (n == 0) return(NULL)  # return NULL if found no clusters
+  if (n == 0) return(NULL)  # return NULL if no clusters found
   if (n > 1) {  # >1 clusters
     cluster_sizes <- sapply(clusterlist, length)
     d             <- diff(range(cluster_sizes))
@@ -95,7 +159,7 @@ ari2tbl <- function(clusterlist, fileInfo) {
     }
   }
   
-  # Compute cluster statistics & tblARI
+  # Compute cluster statistics & construct tblARI
   tblARI <- plyr::laply(1:n, function(i) {
     if (fileInfo$type == "p") {
       clus_stat <- -qnorm(fileInfo$data[fileInfo$aricluster@indexp[clusterlist[[i]]+1]])
@@ -119,30 +183,46 @@ ari2tbl <- function(clusterlist, fileInfo) {
   })
   if (is.null(dim(tblARI))) tblARI <- t(as.matrix(tblARI))
   
-  # Update result table & add MNI coordinates
+  # Update result table "tblARI"
   if (n == 1) {  # one cluster only
     Vox_xyzs <- tblARI[5:7]
-    xyzV     <- paste0("(", as.integer(Vox_xyzs[1]), ", ", as.integer(Vox_xyzs[2]), ", ", as.integer(Vox_xyzs[3]), ")")
-    MNI_xyzs <- xyz2MNI(Vox_xyzs, fileInfo$header)
-    xyzM     <- paste0("(", as.integer(MNI_xyzs[1]), ", ", as.integer(MNI_xyzs[2]), ", ", as.integer(MNI_xyzs[3]), ")")
-    tblARI   <- data.frame(size = as.integer(tblARI[1]), falseH = as.integer(tblARI[2]), trueH = as.integer(tblARI[3]), tdps = tblARI[4], maxT = tblARI[8], xyzV = xyzV, xyzM = xyzM)
+    tblXYZ <- Vox_xyzs
+    # Adjust coordinates for axis flipping
+    if (fileInfo$flip_x) Vox_xyzs[1] <- fileInfo$header$dim[2]-Vox_xyzs[1]+1
+    if (fileInfo$flip_y) Vox_xyzs[2] <- fileInfo$header$dim[3]-Vox_xyzs[2]+1
+    if (fileInfo$flip_z) Vox_xyzs[3] <- fileInfo$header$dim[4]-Vox_xyzs[3]+1
+    # Compute MNI coordinates
+    MNI_xyzs <- xyz2MNI(tblXYZ, fileInfo$header)
+    # Format voxel & MNI coordinates "(x, y, z)"
+    xyzV <- paste0("(", as.integer(Vox_xyzs[1]), ", ", as.integer(Vox_xyzs[2]), ", ", as.integer(Vox_xyzs[3]), ")")
+    xyzM <- paste0("(", as.integer(MNI_xyzs[1]), ", ", as.integer(MNI_xyzs[2]), ", ", as.integer(MNI_xyzs[3]), ")")
+    # Restructure tblARI
+    tblARI <- data.frame(size = as.integer(tblARI[1]), falseH = as.integer(tblARI[2]), trueH = as.integer(tblARI[3]), tdps = tblARI[4], maxT = tblARI[8], xyzV = xyzV, xyzM = xyzM)
   } else { # >1 clusters
     Vox_xyzs <- matrix(as.integer(tblARI[,5:7]), n, 3)
-    xyzV     <- paste0("(", as.integer(Vox_xyzs[,1]), ", ", as.integer(Vox_xyzs[,2]), ", ", as.integer(Vox_xyzs[,3]), ")")
-    MNI_xyzs <- xyz2MNI(Vox_xyzs, fileInfo$header)
-    xyzM     <- paste0("(", as.integer(MNI_xyzs[,1]), ", ", as.integer(MNI_xyzs[,2]), ", ", as.integer(MNI_xyzs[,3]), ")")
-    tblARI   <- data.frame(size = as.integer(tblARI[,1]), falseH = as.integer(tblARI[,2]), trueH = as.integer(tblARI[,3]), tdps = tblARI[,4], maxT = tblARI[,8], xyzV = xyzV, xyzM = xyzM)
+    tblXYZ <- Vox_xyzs
+    # Adjust coordinates for axis flipping
+    if (fileInfo$flip_x) Vox_xyzs[,1] <- fileInfo$header$dim[2]-Vox_xyzs[,1]+1
+    if (fileInfo$flip_y) Vox_xyzs[,2] <- fileInfo$header$dim[3]-Vox_xyzs[,2]+1
+    if (fileInfo$flip_z) Vox_xyzs[,3] <- fileInfo$header$dim[4]-Vox_xyzs[,3]+1
+    # Compute MNI coordinates
+    MNI_xyzs <- xyz2MNI(tblXYZ, fileInfo$header)
+    # Format voxel & MNI coordinates "(x, y, z)"
+    xyzV <- paste0("(", as.integer(Vox_xyzs[,1]), ", ", as.integer(Vox_xyzs[,2]), ", ", as.integer(Vox_xyzs[,3]), ")")
+    xyzM <- paste0("(", as.integer(MNI_xyzs[,1]), ", ", as.integer(MNI_xyzs[,2]), ", ", as.integer(MNI_xyzs[,3]), ")")
+    # Restructure tblARI
+    tblARI <- data.frame(size = as.integer(tblARI[,1]), falseH = as.integer(tblARI[,2]), trueH = as.integer(tblARI[,3]), tdps = tblARI[,4], maxT = tblARI[,8], xyzV = xyzV, xyzM = xyzM)
   }
   
   # Write row & column names
   rownames(tblARI) <- paste0("cl", n:1)
   colnames(tblARI) <- c("Size", "TDN", "TrueNull", "TDP", "max(Z)", "VOX coordinates<br/>(x, y, z)", "MNI coordinates<br/>(x, y, z)")
   
-  return(list(tblARI = tblARI, tblXYZ = Vox_xyzs))
+  return(list(tblARI = tblARI, tblXYZ = tblXYZ))
 }
 
 
-# ---------- (5) Increase size function ----------
+# ---------- (6) Increase size function ----------
 sizeInc <- function(xyz, fileInfo, DTproxy, tdpchg) {
   
   shinyjs::enable("sizeMinus")
@@ -182,7 +262,7 @@ sizeInc <- function(xyz, fileInfo, DTproxy, tdpchg) {
     for (i in 1:n) {
       indices <- fileInfo$aricluster@indexp[tdpchanges@clusterlist[[i]] + 1]
       img_clus[indices] <- n-i+1
-      img_tdps[indices] <- res$tblARI[i, 4]
+      img_tdps[indices] <- res$tblARI[i,4]
     }
     DT::selectRows(DTproxy, selected = n - img_clus[xyz$x, xyz$y, xyz$z] + 1)
     
@@ -202,7 +282,7 @@ sizeInc <- function(xyz, fileInfo, DTproxy, tdpchg) {
 }
 
 
-# ---------- (6) Decrease size function ----------
+# ---------- (7) Decrease size function ----------
 sizeDec <- function(xyz, fileInfo, DTproxy, tdpchg) {
   
   shinyjs::enable("sizePlus")

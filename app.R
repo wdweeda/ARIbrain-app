@@ -28,7 +28,7 @@ scripts <- c("utils.R",
 lapply(scripts, source)
 
 # Define package version
-appVersion <- "0.1.3"
+appVersion <- "0.1.5"
 
 ## --------------- (1) Define UI --------------- ##
 ## using "shinydashboard" ##
@@ -90,16 +90,17 @@ ui <- dashboardPage(header, sidebar, body)
 server <- function(input, output, session) {
   
   # Define reactive values for fileInfo
-  fileInfo <- reactiveValues(type = "u", df = 0, twosided = TRUE, valid = FALSE, selected = "unknown", filename = NULL, 
-                             conc_thres = NULL, mintdp = NULL, header = NULL, data = NULL, pval = NULL, mask = NULL, 
+  fileInfo <- reactiveValues(type = "u", selected = "unknown", df = 0, twosided = TRUE, valid = FALSE, 
+                             flip_x = NULL, flip_y = NULL, flip_z = NULL, filename = NULL, header = NULL,
+                             conc_thres = NULL, mintdp = NULL, data = NULL, pval = NULL, mask = NULL, 
                              map_grad = NULL, aricluster = NULL, tdpclusters = NULL, tdpchanges = NULL)
   
   # Define reactive values for xyz
   xyz <- reactiveValues(x = NULL, y = NULL, z = NULL, img_tdps = NULL, img_clus = NULL, tblARI = NULL, tblXYZ = NULL)
   
   # Observe event after updating fileInfo
-  observeEvent(fileInfo$header, {
-    req(fileInfo$header)
+  observeEvent(fileInfo$header$dim, {
+    req(fileInfo$header$dim)
     xyz$x <- round((fileInfo$header$dim[2]+1)/2)
     xyz$y <- round((fileInfo$header$dim[3]+1)/2)
     xyz$z <- round((fileInfo$header$dim[4]+1)/2)

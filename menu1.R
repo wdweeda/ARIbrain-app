@@ -40,20 +40,16 @@ makeMenu1 <- function(input, output, session, fileInfo, xyz) {
     # Update fileInfo
     checkFileType(input$dataFile, fileInfo)
     
+    # Check if a valid file is selected
     if (!(fileInfo$valid)) {
       shinyjs::disable("dataType")
       shinyjs::disable("toMaskButton")
-      showModal(modalDialog(title = "Invalid File Type", "You selected an invalid file type."))
-      return(NULL)
-    } else if(fileInfo$header$dim[1] != 3) {
-      shinyjs::disable("dataType")
-      shinyjs::disable("toMaskButton")
-      showModal(modalDialog(title = "Invalid Dimensions", "The Nifti file has invalid dimensions."))
+      showModal(modalDialog(title = "Invalid File", "Unsupported file type selected."))
       return(NULL)
     }
     shinyjs::enable("dataType")
     
-    # Set selected type if unknown
+    # Set selected file type if unknown
     if (fileInfo$selected == "unknown") {
       updateSelectInput(session, "dataType", choices = c("Please choose", "z-map", "t-map", "p-map"), selected = "Please choose")  
     } else {
