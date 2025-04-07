@@ -40,40 +40,42 @@ observeMenu5 <- function(input, output, session, fileInfo, xyz) {
   output$sagResBox <- renderUI({
     req(xyz$x, fileInfo$header)
     box(width = 4, height = "100%", background = "black",
-        sliderInput("xslider", label = NULL, step = 1, value = xyz$x, min = 1, max = fileInfo$header$dim[2]),
+        sliderInput("xslider", label = NULL, step = 1, value = ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-xyz$x+1, xyz$x), min = 1, max = fileInfo$header$dim[2]),
         plotOutput("imageSag", click = "sag_click"))
   })
   output$corResBox <- renderUI({
     req(xyz$y, fileInfo$header)
     box(width = 4, height = "100%", background = "black",
-        sliderInput("yslider", label = NULL, step = 1, value = xyz$y, min = 1, max = fileInfo$header$dim[3]),
+        sliderInput("yslider", label = NULL, step = 1, value = ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-xyz$y+1, xyz$y), min = 1, max = fileInfo$header$dim[3]),
         plotOutput("imageCor", click = "cor_click"))
   })
   output$axiResBox <- renderUI({
     req(xyz$z, fileInfo$header)
     box(width = 4, height = "100%", background = "black",
-        sliderInput("zslider", label = NULL, step = 1, value = xyz$z, min = 1, max = fileInfo$header$dim[4]),
+        sliderInput("zslider", label = NULL, step = 1, value = ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-xyz$z+1, xyz$z), min = 1, max = fileInfo$header$dim[4]),
         plotOutput("imageAxi", click = "axi_click"))
   })
   
-  # Render cluster images
+  # Render cluster images - sagittal view (x-plane)
   output$imageSag <- renderPlot({
     req(xyz$x, xyz$y, xyz$z, fileInfo$map_grad, fileInfo$header)
-    plotImage(fileInfo$map_grad, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("sag"))
-    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("sag"))
-    abline(h = xyz$z, v = xyz$y, col = "green")
+    plotImage(fileInfo$map_grad, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("sag"))
+    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("sag"))
+    abline(h = ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-xyz$z+1, xyz$z), v = ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-xyz$y+1, xyz$y), col = "green")
   })
+  # Render cluster images - coronal view (y-plane)
   output$imageCor <- renderPlot({
     req(xyz$x, xyz$y, xyz$z, fileInfo$map_grad, fileInfo$header)
-    plotImage(fileInfo$map_grad, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("cor"))
-    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("cor"))
-    abline(h = xyz$z, v = xyz$x, col = "green")
+    plotImage(fileInfo$map_grad, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("cor"))
+    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("cor"))
+    abline(h = ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-xyz$z+1, xyz$z), v = ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-xyz$x+1, xyz$x), col = "green")
   })
+  # Render cluster images - axial view (z-plane)
   output$imageAxi <- renderPlot({
     req(xyz$x, xyz$y, xyz$z, fileInfo$map_grad, fileInfo$header)
-    plotImage(fileInfo$map_grad, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("axi"))
-    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header$dim[2:4], xyz$x, xyz$y, xyz$z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("axi"))
-    abline(h = xyz$y, v = xyz$x, col = "green")
+    plotImage(fileInfo$map_grad, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, gray.colors(64,0,1), FALSE, zlim = c(0,1), views = c("axi"))
+    if (!is.null(xyz$img_clus)) plotImage(xyz$img_clus, fileInfo$header, xyz$x, xyz$y, xyz$z, fileInfo$flip_x, fileInfo$flip_y, fileInfo$flip_z, rainbow(max(xyz$img_clus[!is.na(xyz$img_clus)])), TRUE, zlim = c(1, max(xyz$img_clus[!is.na(xyz$img_clus)])), views = c("axi"))
+    abline(h = ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-xyz$y+1, xyz$y), v = ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-xyz$x+1, xyz$x), col = "green")
   })
   
   # Render result table box (UI)
@@ -108,27 +110,27 @@ observeMenu5 <- function(input, output, session, fileInfo, xyz) {
   
   # Observe event based on slider changes
   observeEvent(input$xslider, {
-    xyz$x <- input$xslider
+    xyz$x <- ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-input$xslider+1, input$xslider)
   })
   observeEvent(input$yslider, {
-    xyz$y <- input$yslider
+    xyz$y <- ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-input$yslider+1, input$yslider)
   })
   observeEvent(input$zslider, {
-    xyz$z <- input$zslider
+    xyz$z <- ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-input$zslider+1, input$zslider)
   })
   
   # Observe event based on clicking image
   observeEvent(input$sag_click, {
-    xyz$y <- round(input$sag_click$x)
-    xyz$z <- round(input$sag_click$y)
+    xyz$y <- ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-round(input$sag_click$x)+1, round(input$sag_click$x))
+    xyz$z <- ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-round(input$sag_click$y)+1, round(input$sag_click$y))
   })
   observeEvent(input$cor_click, {
-    xyz$x <- round(input$cor_click$x)
-    xyz$z <- round(input$cor_click$y)
+    xyz$x <- ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-round(input$cor_click$x)+1, round(input$cor_click$x))
+    xyz$z <- ifelse(fileInfo$flip_z, fileInfo$header$dim[4]-round(input$cor_click$y)+1, round(input$cor_click$y))
   })
   observeEvent(input$axi_click, {
-    xyz$x <- round(input$axi_click$x)
-    xyz$y <- round(input$axi_click$y)
+    xyz$x <- ifelse(fileInfo$flip_x, fileInfo$header$dim[2]-round(input$axi_click$x)+1, round(input$axi_click$x))
+    xyz$y <- ifelse(fileInfo$flip_y, fileInfo$header$dim[3]-round(input$axi_click$y)+1, round(input$axi_click$y))
   })
   
   # Observe event based on the changes of xyz
@@ -193,7 +195,7 @@ observeMenu5 <- function(input, output, session, fileInfo, xyz) {
     for (i in 1:n) {
       indices <- tdpclusters@aricluster@indexp[tdpclusters@clusterlist[[i]]+1]
       img_clus[indices] <- n-i+1
-      img_tdps[indices] <- res$tblARI[i, 4]
+      img_tdps[indices] <- res$tblARI[i,4]
     }
     # Update xyz
     xyz$img_clus <- img_clus
@@ -231,7 +233,7 @@ observeMenu5 <- function(input, output, session, fileInfo, xyz) {
     for (i in 1:n) {
       indices <- fileInfo$aricluster@indexp[clusterlist[[i]]+1]
       img_clus[indices] <- n-i+1
-      img_tdps[indices] <- res$tblARI[i, 4]
+      img_tdps[indices] <- res$tblARI[i,4]
     }
     if (!is.null(xyz$x) && !is.null(xyz$y) && !is.null(xyz$z) && !is.na(img_clus[xyz$x, xyz$y, xyz$z])) {
       DT::selectRows(DTproxy, selected = n - img_clus[xyz$x, xyz$y, xyz$z] + 1)
