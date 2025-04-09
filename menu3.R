@@ -20,9 +20,9 @@ observeMenu3 <- function(input, output, session, fileInfo, xyz) {
         helpText("Face connectivity (6), edge connectivity (18), vertex connectivity (26)."),
         selectInput("simes", "Local test", choices = c("Simes", "Robust variant of Simes"), selected = "Simes", multiple = FALSE),
         # textInput("path", "Please specify the full path to output directory:", value = "/my/path/to/app"),
-        tags$div(style = "margin-bottom: -1em", selectInput("twosidedTest", "Statistical test:", choices = c("one-sided", "two-sided"), selected = ifelse(fileInfo$type == "p" & !fileInfo$twosided, "one-sided", "two-sided"), multiple = FALSE)),
+        tags$div(style = "margin-bottom: -1em", selectInput("twosidedTest", "Statistical test:", choices = c("one-sided", "two-sided"), selected = ifelse(!fileInfo$twosided, "one-sided", "two-sided"), multiple = FALSE)),
         helpText("Please choose either a one-sided or two-sided test for statistical inference.",
-                 "NOTE: If the input file is a p-map, the choice has been made automatically."))
+                 "NOTE: If the input file is a p-map, the choice should have been made automatically."))
   })
   
   # Render button box (UI)
@@ -55,18 +55,12 @@ observeMenu3 <- function(input, output, session, fileInfo, xyz) {
       simes <- ifelse(input$simes == "Simes", TRUE, FALSE)
       conn  <- as.integer(input$conn)
       alpha <- as.numeric(input$alpha)
-      if (fileInfo$type == "p") {
-        if ((input$twosidedTest == "two-sided" && !fileInfo$twosided) || (input$twosidedTest == "one-sided" && fileInfo$twosided)) {
-          showModal(modalDialog(title = NULL, paste0("The input p-map is ", ifelse(fileInfo$twosided, "two-sided", "one-sided"), ", but the selected statistical test is ", input$twosidedTest, ". The follow-up analysis will be based on the input p-map information.")))
-          return(NULL)
-        }
-      }
       
       # Compute p-values
       pval <- fileInfo$data
       if (fileInfo$type != "p") {
         pval[fileInfo$mask == 0] <- 1
-        if (input$twosidedTest == "two-sided") {  # two-sided test
+        if (fileInfo$twosided) {  # two-sided test
           if (fileInfo$type == "t") {
             if (fileInfo$df > 0) {
               pval <- 2*pt(-abs(pval), df = fileInfo$df)
@@ -76,7 +70,7 @@ observeMenu3 <- function(input, output, session, fileInfo, xyz) {
           } else if (fileInfo$type == "z") {
             pval <- 2*pnorm(-abs(pval))
           }
-        } else if (input$twosidedTest == "one-sided") {  # one-sided test
+        } else {  # one-sided test
           if (fileInfo$type == "t") {
             if (fileInfo$df > 0) {
               pval <- 1 - pt(pval, df = fileInfo$df)
@@ -129,6 +123,17 @@ observeMenu3 <- function(input, output, session, fileInfo, xyz) {
       fileInfo$aricluster <- aricluster
       fileInfo$map_grad   <- map_grad
     })
+  })
+  
+  # Observe event after changing input parameter "twosidedTest"
+  observeEvent(input$twosidedTest, {
+    req(input$twosidedTest)
+    if (fileInfo$type == "p") {
+      if ((!fileInfo$twosided && input$twosidedTest == "two-sided") || (fileInfo$twosided && input$twosidedTest == "one-sided"))
+        showModal(modalDialog(title = "Mismatch between input p-map and selected test", paste0("The input p-map is ", ifelse(fileInfo$twosided, "two-sided", "one-sided"), ", but the selected statistical test is ", input$twosidedTest, ". The follow-up analysis will be based on the information from the p-map.")))
+    } else {
+      fileInfo$twosided <- (input$twosidedTest == "two-sided")
+    }
   })
   
 }

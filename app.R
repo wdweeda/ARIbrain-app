@@ -28,7 +28,7 @@ scripts <- c("utils.R",
 lapply(scripts, source)
 
 # Define package version
-appVersion <- "0.1.5"
+appVersion <- "0.1.6"
 
 ## --------------- (1) Define UI --------------- ##
 ## using "shinydashboard" ##
