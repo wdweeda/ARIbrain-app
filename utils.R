@@ -33,7 +33,7 @@ checkFileType <- function(inFile, fileInfo) {
     #   stop("Undefined Spatial Orientation: All sform affine matrix components (srow_x, srow_y, srow_z) are zero.")
     
     # Find axis flipping conditions 
-    # (The default for NIfTI is RAS+ orientation, but we use LAS for visualisation)
+    # (The default for NIfTI is RAS+ orientation, but we use LAS for visualisation, which is consistent with most tools)
     sform <- RNifti::xform(hdr)
     fileInfo$flip_x <- sform[1,1] > 0
     fileInfo$flip_y <- sform[2,2] < 0
@@ -166,7 +166,7 @@ ari2tbl <- function(clusterlist, fileInfo) {
     } else {
       clus_stat <- fileInfo$data[fileInfo$aricluster@indexp[clusterlist[[i]]+1]]
     }
-    id_clus   <- which.max(clus_stat)
+    id_clus   <- which.max(abs(clus_stat))
     id_max    <- clusterlist[[i]][id_clus]+1
     xyz_max   <- ARIbrain:::ids2xyz(as.integer(fileInfo$aricluster@indexp[id_max]-1), fileInfo$header$dim[2:4])
     
@@ -216,7 +216,7 @@ ari2tbl <- function(clusterlist, fileInfo) {
   
   # Write row & column names
   rownames(tblARI) <- paste0("cl", n:1)
-  colnames(tblARI) <- c("Size", "TDN", "TrueNull", "TDP", "max(Z)", "VOX coordinates<br/>(x, y, z)", "MNI coordinates<br/>(x, y, z)")
+  colnames(tblARI) <- c("Size", "TDN", "TrueNull", "TDP", "max(Stat)", "VOX coordinates<br/>(x, y, z)", "MNI coordinates<br/>(x, y, z)")
   
   return(list(tblARI = tblARI, tblXYZ = tblXYZ))
 }

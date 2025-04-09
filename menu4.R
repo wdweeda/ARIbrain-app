@@ -200,15 +200,18 @@ observeMenu4 <- function(input, output, session, fileInfo, xyz) {
           if (fileInfo$type == "p") {
             ARIbrain::cluster_threshold(fileInfo$data > 0 & fileInfo$data < pnorm(-input$zthres) & fileInfo$mask != 0)
           } else {
-            ARIbrain::cluster_threshold(fileInfo$data > input$zthres & fileInfo$mask != 0)
+            if (fileInfo$twosided) {
+              ARIbrain::cluster_threshold((fileInfo$data > input$zthres | fileInfo$data < -input$zthres) & fileInfo$mask != 0)
+            } else {
+              ARIbrain::cluster_threshold(fileInfo$data > input$zthres & fileInfo$mask != 0)
+            }
           }
         })
       },
       error = function(e) {
         message("Error forming clusters: ", e$message)
         return(NULL)
-      }
-      )
+      })
       # Find cluster labels
       labels_clus <- sort(unique(as.vector(img_clus[img_clus>0])))
       
@@ -234,7 +237,7 @@ observeMenu4 <- function(input, output, session, fileInfo, xyz) {
         xyzV <- paste0("(", as.integer(Vox_xyzs[1]), ", ", as.integer(Vox_xyzs[2]), ", ", as.integer(Vox_xyzs[3]), ")")
         xyzM <- paste0("(", as.integer(MNI_xyzs[1]), ", ", as.integer(MNI_xyzs[2]), ", ", as.integer(MNI_xyzs[3]), ")")
         # Restructure tblARI
-        tblARI <- data.frame(size = as.integer(tblARI[1]), falseH = as.integer(tblARI[2]), trueH = as.integer(tblARI[3]), tdps = tblARI[4], maxT = tblARI[8], xyzV = xyzV, xyzM = xyzM)
+        tblARI <- data.frame(size = as.integer(tblARI[1]), falseH = as.integer(tblARI[2]), trueH = as.integer(tblARI[3]), tdps = tblARI[4], maxT = tblARI[8], xyzV = xyzV, xyzM = xyzM)  # fileInfo$data[tblXYZ]
       } else {  # >1 clusters
         Vox_xyzs <- matrix(as.integer(tblARI[,5:7]), length(labels_clus), 3)
         tblXYZ <- Vox_xyzs
@@ -248,7 +251,7 @@ observeMenu4 <- function(input, output, session, fileInfo, xyz) {
         xyzV <- paste0("(", as.integer(Vox_xyzs[,1]), ", ", as.integer(Vox_xyzs[,2]), ", ", as.integer(Vox_xyzs[,3]), ")")
         xyzM <- paste0("(", as.integer(MNI_xyzs[,1]), ", ", as.integer(MNI_xyzs[,2]), ", ", as.integer(MNI_xyzs[,3]), ")")
         # Restructure tblARI
-        tblARI <- data.frame(size = as.integer(tblARI[,1]), falseH = as.integer(tblARI[,2]), trueH = as.integer(tblARI[,3]), tdps = tblARI[,4], maxT = tblARI[,8], xyzV = xyzV, xyzM = xyzM)
+        tblARI <- data.frame(size = as.integer(tblARI[,1]), falseH = as.integer(tblARI[,2]), trueH = as.integer(tblARI[,3]), tdps = tblARI[,4], maxT = tblARI[,8], xyzV = xyzV, xyzM = xyzM)  # fileInfo$data[tblXYZ]
       }
       # Update img_tdps & img_clus
       img_tdps <- array(NA, fileInfo$header$dim[2:4])
@@ -260,7 +263,7 @@ observeMenu4 <- function(input, output, session, fileInfo, xyz) {
     
     # Add row & column names
     rownames(tblARI) <- paste0("cl", rev(labels_clus))
-    colnames(tblARI) <- c("Size", "TDN", "TrueNull", "TDP", "max(Z)", "VOX coordinates<br/>(x, y, z)", "MNI coordinates<br/>(x, y, z)")
+    colnames(tblARI) <- c("Size", "TDN", "TrueNull", "TDP", "max(Stat)", "VOX coordinates<br/>(x, y, z)", "MNI coordinates<br/>(x, y, z)")
     
     # Update xyz
     xyz$img_clus <- img_clus
